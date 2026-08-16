@@ -1,0 +1,10 @@
+{
+  "provider": "pku_client",
+  "elsevier_api_key": "（可选）Elsevier Article Retrieval API key，用于 Phase 2 的 Elsevier 下载",
+  "elsevier_inst_token": "",
+  "elsevier_manual": true,
+  "pku": {
+    "cookies": {}
+  },
+  "pku_client": {}
+}

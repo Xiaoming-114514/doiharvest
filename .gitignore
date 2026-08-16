@@ -1,0 +1,62 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# ── 虚拟环境 ──
+.venv/
+venv/
+mineru_env/
+env/
+
+# ── 敏感配置（含 API Key / 机构 VPN cookies，切勿提交！）──
+workspace_config.json
+webvpn_config.json
+# 但保留 .example 模板供用户复制
+!workspace_config.json.example
+!webvpn_config.json.example
+
+# ── 运行时状态 ──
+pipeline_state.json
+
+# ── 用户数据与产出 ──
+data/
+papers/
+papers_corrupt/
+papers_duplicates_backup/
+output/
+ocr/
+ocr_output/
+logs/
+cache/
+
+# ── 第三方库（nature-downloader，含 node_modules + chrome_profile 敏感数据）──
+nature-downloader/
+
+# ── 备份与临时文件 ──
+*.bak
+*.bak_*
+*.log
+*.tmp
+
+# ── 开发调试 / 一次性修复脚本（不属于核心功能）──
+_test_*.py
+test_*.py
+debug_*.py
+diag_*.py
+fix_*.py
+repair_*.py
+refilter_*.py
+analyze_*.py
+match_ocr_*.py
+rename_pdfs.py
+execute_ocr_rename.py
+check_ws.py
+
+# ── IDE / 系统 ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+

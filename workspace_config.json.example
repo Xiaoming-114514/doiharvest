@@ -1,0 +1,11 @@
+{
+  "output_dir": "在这里填写你的工作目录（结果 Excel 会保存到这里），例如 E:/my_project",
+  "screening_inclusion": "",
+  "screening_exclusion": "",
+  "deepseek_api_key": "在这里填入你的 DeepSeek API Key（Phase 4 需要，https://platform.deepseek.com/ 免费申请）",
+  "deepseek_model": "deepseek-v4-pro",
+  "deepseek_api_base": "https://api.deepseek.com",
+  "screening_max_chars": 90000,
+  "screening_temperature": 0.2,
+  "mineru_output_dir": "OCR 输出目录，留空则自动使用 output_dir/ocr_output"
+}

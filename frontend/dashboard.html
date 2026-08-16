@@ -1,0 +1,2568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DoiHarvest — 文献批量下载</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #fff;
+    --border: #e4e4e7;
+    --text: #18181b;
+    --text-secondary: #71717a;
+    --accent: #534ab7;
+    --accent-light: #eeedfe;
+    --green: #0f6e56;
+    --green-bg: #e1f5ee;
+    --coral: #993c1d;
+    --coral-bg: #faece7;
+    --amber: #854f0b;
+    --amber-bg: #faeeda;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 13px;
+  }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 20px; }
+
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  h2 { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+  h3 { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+  .subtitle { color: var(--text-secondary); font-size: 12px; margin-bottom: 24px; }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  button {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-outline { background: none; border: 0.5px solid var(--border); color: var(--text); }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-coral { background: var(--coral); color: #fff; }
+
+  input[type="file"] {
+    padding: 8px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--surface);
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .status-running { background: var(--amber-bg); color: var(--amber); }
+  .status-done { background: var(--green-bg); color: var(--green); }
+  .status-error { background: var(--coral-bg); color: var(--coral); }
+  .status-idle { background: #f4f4f5; color: var(--text-secondary); }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .stat-value { font-size: 24px; font-weight: 500; }
+  .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+  .log-box {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 8px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log-line { margin-bottom: 2px; }
+  .log-info { color: #89b4fa; }
+  .log-success { color: #a6e3a1; }
+  .log-warn { color: #fab387; }
+  .log-error { color: #f38ba8; }
+
+  .phase-indicator {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .phase-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 500;
+    border: 2px solid var(--border);
+    background: #f4f4f5;
+    color: var(--text-secondary);
+  }
+  .phase-dot.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .phase-dot.done { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+
+  .hidden { display: none; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 0.5px solid var(--border);
+  }
+  th {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tr-clickable { cursor: pointer; }
+  .tr-clickable:hover { background: #f4f4f5; }
+
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-secondary); }
+
+  /* CDP Guide */
+  .guide-box {
+    background: #f8f7ff;
+    border: 0.5px solid var(--accent-light);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .guide-box h3 { color: var(--accent); }
+  .guide-box code {
+    background: #e8e7f5;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+  }
+  .guide-box ol, .guide-box ul { padding-left: 20px; margin: 6px 0; }
+  .guide-box li { margin-bottom: 4px; }
+  .guide-box .step-title { font-weight: 500; color: var(--text); }
+  .guide-box .note { color: var(--amber); font-size: 11px; margin-top: 8px; }
+  .guide-box .check-pass { color: var(--green); }
+  .guide-box .check-fail { color: var(--coral); }
+  .collapsible-toggle {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 12px;
+    user-select: none;
+  }
+  .collapsible-toggle:hover { text-decoration: underline; }
+  .collapsible-body { margin-top: 10px; }
+  .collapsible-body.collapsed { display: none; }
+
+  .prereq-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .prereq-icon { font-size: 14px; width: 20px; text-align: center; }
+  .prereq-label { flex: 1; }
+  .prereq-status { font-weight: 500; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 24px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  }
+  .modal h3 { margin-bottom: 16px; }
+  .modal .tab-row { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
+  .modal .tab-btn {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    border-radius: 0;
+  }
+  .modal .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .modal .tab-content { display: none; }
+  .modal .tab-content.active { display: block; }
+  .modal .doi-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: monospace;
+    margin-bottom: 12px;
+    background: #f8f8f8;
+    color: var(--text-secondary);
+  }
+  .modal .local-path-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .modal .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 12px;
+  }
+  .modal .drop-zone:hover, .modal .drop-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .modal .drop-zone p { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; }
+  .modal .drop-zone .icon { font-size: 32px; }
+  .modal .upload-status { font-size: 12px; margin-top: 8px; min-height: 18px; }
+
+  /* Status badges in table */
+  .status-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .status-downloaded { background: #C6EFCE; color: #0f6e56; }
+  .status-manual { background: #BDD7EE; color: #1a5c8a; }
+  .status-missing { background: #FFC7CE; color: #993c1d; }
+  .status-other { background: #f4f4f5; color: #71717a; }
+
+  .btn-sm {
+    padding: 4px 12px;
+    font-size: 11px;
+    border-radius: 6px;
+  }
+  .btn-add-pdf {
+    background: var(--accent-light);
+    color: var(--accent);
+    border: none;
+  }
+  .btn-add-pdf:hover { background: #ddd9f9; }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filter-row select, .filter-row input {
+    padding: 6px 10px;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .filter-row input { flex: 1; min-width: 160px; }
+  .filter-count { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>DoiHarvest</h1>
+  <p class="subtitle">P1: Sci-Hub <span style="margin:0 4px">→</span> P2: WebVPN <span style="margin:0 4px">→</span> P3: OCR <span style="margin:0 4px">→</span> P4: LLM Screening</p>
+
+  <!-- Upload -->
+  <div class="card">
+    <h2>1. Upload DOI list</h2>
+    <div class="row">
+      <input type="file" id="csvFile" accept=".csv">
+      <button class="btn-primary" onclick="uploadCsv()">Upload</button>
+    </div>
+    <p id="uploadStatus" style="margin-top:8px;font-size:12px;color:var(--text-secondary)"></p>
+  </div>
+
+  <!-- DOI Completion — title-based DOI search -->
+  <div class="card hidden" id="doiCompletionCard">
+    <h2>DOI Completion  <span style="font-size:11px;color:var(--text-secondary);font-weight:400">(auto-search by title)</span></h2>
+    <p id="doiCompletionInfo" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px"></p>
+
+    <button class="btn-primary" id="btnDoiComplete" onclick="startDoiCompletion()">Find DOIs by Title</button>
+
+    <div class="progress-bar hidden" id="doiProgress">
+      <div class="progress-fill" id="doiProgressFill" style="width:0%;background:var(--accent)"></div>
+    </div>
+    <p id="doiProgressText" style="font-size:12px;color:var(--text-secondary);margin-bottom:0"></p>
+
+    <!-- Results table -->
+    <div class="hidden" id="doiResultsArea" style="margin-top:14px">
+      <div class="filter-row">
+        <select id="doiResultFilter" onchange="filterDoiResults()">
+          <option value="all">All ({missing_doi})</option>
+          <option value="high">High Confidence (auto-accepted)</option>
+          <option value="medium">Medium Confidence (needs review)</option>
+          <option value="low">Low Confidence</option>
+          <option value="no_match">No Match</option>
+          <option value="manual">Manually Edited</option>
+        </select>
+        <span class="filter-count" id="doiSummary"></span>
+      </div>
+
+      <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+        <table id="doiResultsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Title</th>
+              <th>Matched DOI</th>
+              <th>Confidence</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="row" style="margin-top:12px;justify-content:space-between">
+        <div>
+          <button class="btn-outline" onclick="acceptAllHighConfidence()">Accept All High</button>
+          <button class="btn-outline" style="margin-left:8px;color:var(--text-secondary);border-color:var(--border-light)" onclick="ignoreAllNoMatch()">Ignore All No Match</button>
+        </div>
+        <div>
+          <button class="btn-primary" id="btnApplyDoi" onclick="applyDoiCompletion()">Apply & Create Completed File</button>
+        </div>
+      </div>
+      <p id="doiApplyStatus" style="font-size:12px;color:var(--text-secondary);margin-top:8px"></p>
+    </div>
+  </div>
+
+  <!-- Output Settings -->
+  <div class="card">
+    <h2>2. Output Settings</h2>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label for="outputPath" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Output Directory (PDFs & CSV)</label>
+        <input type="text" id="outputPath" placeholder="Default: ./output" style="padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);width:100%" onkeydown="if(event.key==='Enter')saveOutputDir()">
+      </div>
+      <button class="btn-primary" onclick="saveOutputDir()">Save</button>
+    </div>
+    <p id="outputStatus" style="margin-top:8px;font-size:11px;color:var(--text-secondary)"></p>
+  </div>
+
+  <!-- Phase indicators -->
+  <div class="phase-indicator" id="phaseIndicator">
+    <div class="phase-dot" id="phase1Dot">P1</div>
+    <div style="width:40px;height:2px;background:var(--border);align-self:center"></div>
+    <div class="phase-dot" id="phase2Dot">P2</div>
+    <div style="width:40px;height:2px;background:var(--border);align-self:center"></div>
+    <div class="phase-dot" id="phase3Dot">P3</div>
+    <div style="width:40px;height:2px;background:var(--border);align-self:center"></div>
+    <div class="phase-dot" id="phase4Dot">P4</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-value" id="statTotal">-</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statDownloaded" style="color:var(--green)">-</div>
+      <div class="stat-label">Downloaded</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statPhase1">-</div>
+      <div class="stat-label">Phase 1</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statPhase2">-</div>
+      <div class="stat-label">Phase 2</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statFailed" style="color:var(--coral)">-</div>
+      <div class="stat-label">Failed / No Access</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statOcr" style="color:var(--accent)">-</div>
+      <div class="stat-label">OCR Success</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statScreened" style="color:var(--green)">-</div>
+      <div class="stat-label">Included (P4)</div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar hidden" id="progressBar">
+    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  </div>
+  <p id="progressText" style="font-size:12px;color:var(--text-secondary);margin-bottom:16px"></p>
+
+  <!-- Phase 1 Card: Sci-Hub (independent module) -->
+  <div class="card" id="phase1Card">
+    <h2>Phase 1: Sci-Hub Download</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Download papers via <strong>Sci-Hub</strong> (grey open-access channel, with OA mirror fallback).
+      Papers that fail here flow into <strong>Phase 2</strong> below for library-proxy retry.
+    </p>
+    <div class="row" style="margin-bottom:0">
+      <button class="btn-green" id="btnStart" onclick="startPipeline()">Start Phase 1 (Sci-Hub)</button>
+      <span class="status-badge status-idle" id="statusBadge">Idle</span>
+    </div>
+  </div>
+
+  <!-- Phase 2 Card: institutional access (campus VPN client / library WebVPN) -->
+  <div class="card" id="phase2Card">
+    <h2>Phase 2: 校内 VPN / 图书馆 WebVPN Download</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Retry failed papers through <strong>institutional access</strong> —
+      校内 VPN 客户端直连（推荐，IP 认证）或
+      北大 WebVPN
+      (<a href="https://wpn.pku.edu.cn" target="_blank" style="color:var(--accent)">wpn.pku.edu.cn</a>).
+    </p>
+
+    <div class="row" style="margin-bottom:12px;align-items:center">
+      <span class="status-badge status-idle" id="webvpnBadge">Not configured</span>
+    </div>
+
+    <div class="row" style="margin-bottom:12px;align-items:center">
+      <label for="phase2ProviderSelect" style="font-size:12px;margin-right:8px;white-space:nowrap">访问通道:</label>
+      <select id="phase2ProviderSelect" onchange="onPhase2ProviderChange()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary);flex:1">
+        <option value="pku_client">校内 VPN 客户端直连（IP 认证，需先连接客户端）</option>
+        <option value="pku">北大 WebVPN（wpn.pku.edu.cn）</option>
+      </select>
+    </div>
+
+    <p id="phase2NonOaText" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px"></p>
+
+    <!-- Step 1: WebVPN Login -->
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn-primary" id="btnAutoLogin" onclick="autoLoginWebvpn()" style="font-size:13px;padding:8px 20px">
+        🔑 Step 1: Auto Login (Chrome)
+      </button>
+      <button class="btn-outline" id="btnConfigWebvpn" onclick="configureWebvpn()" style="font-size:12px">
+        Manual Config
+      </button>
+    </div>
+
+    <!-- Step 2: Execute Phase 2 -->
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn-primary" id="btnPhase2" onclick="startPhase2()" disabled>
+        Step 2: Execute Phase 2
+      </button>
+      <span class="status-badge status-idle" id="phase2Badge">Idle</span>
+    </div>
+
+    <!-- Cookie input (hidden by default, shown on Configure click) -->
+    <div class="hidden" id="webvpnCookiePanel" style="margin-bottom:12px">
+      <p style="font-size:11px;color:var(--text-secondary);margin-bottom:6px" id="webvpnCookieHowTo">
+        <strong>How to get cookies:</strong><br>
+        1. Open the provider's WebVPN portal (see link above) in your browser<br>
+        2. Log in with university credentials<br>
+        3. Open DevTools (F12) → Application → Cookies<br>
+        4. Paste cookies below (one per line: <code>name=value</code>)
+      </p>
+      <textarea id="webvpnCookieInput" rows="5" style="width:100%;font-family:monospace;font-size:11px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary)" placeholder="SESSION=abc123&#10;JSESSIONID=xyz789&#10;..."></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn-green" onclick="saveWebvpnCookies()" style="font-size:12px;padding:6px 16px">Save Cookies</button>
+        <button class="btn-outline" onclick="testWebvpnConnection()" style="font-size:12px;padding:6px 16px">Test Connection</button>
+        <span id="webvpnTestResult" style="font-size:11px"></span>
+      </div>
+    </div>
+
+    <p style="font-size:11px;color:var(--text-secondary);margin-bottom:8px" id="phase2Instructions">
+      <strong>校内 VPN 直连</strong>：启动并登录北大 VPN 客户端
+      （<a href="https://vpn.pku.edu.cn" target="_blank" style="color:var(--accent)">vpn.pku.edu.cn</a>），
+      无需浏览器登录，直接点击 <strong>Step 2</strong> 以校内 IP 下载。
+      切换为 <strong>北大 WebVPN</strong> 通道时，Step 1 会启动 Chrome 完成登录后关闭窗口保存 cookies。
+    </p>
+
+    <!-- Guide (collapsible) -->
+    <div class="guide-box">
+      <div class="collapsible-toggle" onclick="toggleWebvpnGuide()" id="webvpnGuideToggle">
+        📘 Phase 2 Guide (click to expand)
+      </div>
+      <div class="collapsible-body collapsed" id="webvpnGuideBody">
+        <h3>How Phase 2 works</h3>
+        <p>
+          Phase 2 uses your library WebVPN session to access papers through institutional subscriptions:
+        </p>
+        <ol>
+          <li><strong>URL Conversion</strong> — DOI → publisher URL → WebVPN proxy URL</li>
+          <li><strong>PDF Extraction</strong> — Parse the publisher page for PDF links</li>
+          <li><strong>Download</strong> — Fetch PDF through WebVPN with your credentials</li>
+        </ol>
+
+        <h3>PKU Library WebVPN</h3>
+        <p><strong>北大图书馆</strong> — wpn.pku.edu.cn, wrdvpn path-style proxy
+          (hostname AES-encrypted in the URL path). Downloads run requests-first for speed,
+          with an automatic browser retry for JavaScript-heavy pages.</p>
+
+        <h3>Troubleshooting</h3>
+        <ul>
+          <li><strong>"No cookies configured"</strong> — Click Step 1 and complete PKU login in the Chrome window</li>
+          <li><strong>"Session expired"</strong> — Re-login (Step 1) to refresh cookies</li>
+          <li><strong>"Access denied"</strong> — The journal may not be in PKU library's subscription</li>
+          <li><strong>All downloads fail</strong> — Try Sci-Hub (Phase 1) again, or manually download</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin-bottom:0">Log</h2>
+      <button class="btn-outline" onclick="clearLog()" style="font-size:11px;padding:4px 12px">Clear</button>
+    </div>
+    <div class="log-box" id="logBox">
+      <div class="log-line log-info">Waiting for CSV upload...</div>
+    </div>
+  </div>
+
+  <!-- Results — enhanced with status summary + manual supplement -->
+  <div class="card hidden" id="resultsCard">
+    <h2>Download Results</h2>
+
+    <!-- Status summary -->
+    <div class="stats-grid" id="resultsSummaryGrid" style="margin-bottom:16px">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--green)" id="statResultDownloaded">0</div>
+        <div class="stat-label">Full Text Available</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--coral)" id="statResultMissing">0</div>
+        <div class="stat-label">Full Text Missing</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statResultCoverage">0%</div>
+        <div class="stat-label">Coverage Rate</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--accent)" id="statResultManual">0</div>
+        <div class="stat-label">Manually Added</div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-row">
+      <select id="resultFilter" onchange="filterResults()">
+        <option value="all">All Papers</option>
+        <option value="has_pdf">Full Text Available</option>
+        <option value="missing">Full Text Missing</option>
+        <option value="downloaded">Auto-Downloaded</option>
+        <option value="manual_added">Manually Added</option>
+        <option value="not_oa">Not OA</option>
+        <option value="no_access">No Access</option>
+        <option value="download_failed">Download Failed</option>
+      </select>
+      <input type="text" id="resultSearch" placeholder="Search by DOI, title, or author..." oninput="filterResults()">
+      <span class="filter-count" id="filterCount">0 papers</span>
+      <button class="btn-outline btn-sm" onclick="exportMissingFulltext()" style="color:var(--coral);border-color:var(--coral)" title="Export papers without full text as a separate Excel">📋 导出未找到文献</button>
+      <button class="btn-outline btn-sm" onclick="exportResultsExcel()">Download Excel</button>
+    </div>
+
+    <!-- Table -->
+    <div style="overflow-x:auto;max-height:500px;overflow-y:auto">
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>DOI</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Year</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Next-step prompt: appears when downloads are done and Phase 3 is visible -->
+    <div class="hidden" id="resultsNextStep" style="margin-top:14px;padding:12px;background:var(--accent-light);border-radius:8px;text-align:center">
+      <span style="font-size:13px;color:var(--accent);font-weight:500">
+        Coverage: <span id="resultsCoveragePct">0%</span> &mdash;
+        Review results and add any missing PDFs above, then proceed:
+      </span>
+      <button class="btn-primary" style="margin-left:12px;font-size:13px" onclick="document.getElementById('phase3Card').scrollIntoView({behavior:'smooth'})">Start Phase 3 (OCR) &darr;</button>
+    </div>
+  </div>
+
+  <!-- PDF Upload Modal -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <h3>Add PDF</h3>
+      <div class="doi-field" id="modalDoi"></div>
+
+      <div class="tab-row">
+        <button class="tab-btn active" onclick="switchUploadTab('file')">Upload File</button>
+        <button class="tab-btn" onclick="switchUploadTab('local')">Local Path</button>
+      </div>
+
+      <!-- Tab: Upload -->
+      <div class="tab-content active" id="tabUpload">
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('pdfFileInput').click()">
+          <div class="icon">📄</div>
+          <p>Click or drag a PDF file here</p>
+          <p style="font-size:11px;color:var(--text-secondary)">Max 100 MB</p>
+        </div>
+        <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="onPdfFileSelected(event)">
+        <p id="uploadFileName" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px"></p>
+        <button class="btn-primary" id="btnUploadPdf" onclick="submitUploadPdf()" disabled>Upload PDF</button>
+        <p class="upload-status" id="uploadStatusMsg"></p>
+      </div>
+
+      <!-- Tab: Local Path -->
+      <div class="tab-content" id="tabLocal">
+        <input type="text" class="local-path-field" id="localPathInput" placeholder="e.g. D:\Papers\my-paper.pdf">
+        <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">
+          The file will be <strong>copied</strong> (not moved) to the papers directory.
+        </p>
+        <button class="btn-primary" id="btnImportLocal" onclick="submitLocalPdf()">Import from Path</button>
+        <p class="upload-status" id="localStatusMsg"></p>
+      </div>
+
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn-outline" onclick="closeUploadModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: MinerU OCR -->
+  <div class="card hidden" id="phase3Card">
+    <h2>3. MinerU OCR</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Batch-process all downloaded PDFs through MinerU for text extraction, then generate
+      a final Excel with <code>download_success</code> and <code>ocr_success</code> columns.
+    </p>
+
+    <!-- MinerU output path config -->
+    <div class="row" style="align-items:flex-end;margin-bottom:12px">
+      <div style="flex:1;min-width:200px">
+        <label for="mineruOutputPath" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">MinerU MD Output Directory (where .md files go)</label>
+        <input type="text" id="mineruOutputPath" placeholder="Default: {output_dir}/ocr_output" style="padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);width:100%" onkeydown="if(event.key==='Enter')saveMineruOutputDir()">
+      </div>
+      <button class="btn-outline" onclick="saveMineruOutputDir()">Save</button>
+    </div>
+    <p id="mineruOutputStatus" style="font-size:11px;color:var(--text-secondary);margin-bottom:12px"></p>
+
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn-coral" id="btnPhase3" onclick="startPhase3()" disabled>Start OCR</button>
+      <span class="status-badge status-idle" id="phase3Badge">Idle</span>
+    </div>
+    <div class="progress-bar hidden" id="phase3Progress">
+      <div class="progress-fill" id="phase3ProgressFill" style="width:0%;background:var(--coral)"></div>
+    </div>
+    <p id="phase3Text" style="font-size:12px;color:var(--text-secondary)"></p>
+    <div class="row hidden" id="phase3Results" style="margin-top:12px">
+      <button class="btn-outline" onclick="downloadExcel()">Download Excel</button>
+    </div>
+  </div>
+
+  <!-- Phase 4: LLM Screening -->
+  <div class="card hidden" id="phase4Card">
+    <h2>4. LLM Screening (Meta-Analysis)</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Send each paper's extracted Markdown to DeepSeek for full-text screening
+      against your inclusion / exclusion criteria. The final Excel adds
+      <code>screening_decision</code> (Include/Exclude/Skip) and
+      <code>screening_reason</code> columns.
+    </p>
+
+    <div style="margin-bottom:10px">
+      <label for="deepseekApiKey" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">
+        DeepSeek API Key
+        <span style="font-weight:400">(stored locally, never sent elsewhere)</span>
+      </label>
+      <div style="display:flex;align-items:center;gap:8px;max-width:500px">
+        <input type="password" id="deepseekApiKey" placeholder="sk-xxxxxxxxxxxxxxxx"
+          style="flex:1;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <button class="btn-outline" onclick="savePhase4Settings()" style="white-space:nowrap;padding:8px 16px">Save Settings</button>
+        <span id="phase4SaveStatus" style="font-size:11px;color:var(--text-secondary);white-space:nowrap"></span>
+      </div>
+    </div>
+
+    <details style="margin-bottom:10px;font-size:12px;color:var(--text-secondary)">
+      <summary style="cursor:pointer;margin-bottom:6px;user-select:none">Advanced Settings</summary>
+      <div style="padding:8px 0 0 12px;border-left:2px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:520px">
+
+        <div>
+          <label for="deepseekModel" style="display:block;margin-bottom:3px">Model</label>
+          <input type="text" id="deepseekModel" placeholder="deepseek-v4-pro"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label for="deepseekApiBase" style="display:block;margin-bottom:3px">API Base URL</label>
+          <input type="text" id="deepseekApiBase" placeholder="https://api.deepseek.com"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label for="maxContentChars" style="display:block;margin-bottom:3px">Content Limit (chars)</label>
+          <input type="number" id="maxContentChars" placeholder="160000" min="1000" step="1000"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label for="screeningTemperature" style="display:block;margin-bottom:3px">Temperature (0-2)</label>
+          <input type="number" id="screeningTemperature" placeholder="0.1" min="0" max="2" step="0.05"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+      </div>
+    </details>
+
+    <div style="margin-bottom:10px">
+      <label for="includeCriteria" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">
+        Inclusion Criteria (纳入标准)
+      </label>
+      <textarea id="includeCriteria" placeholder="留空即使用内置 4 步决策树：
+
+STEP 1 — 文献类型：原始研究 ✓（横断面/病例对照/队列/RCT/量表验证/诊断准确性/干预/卫生服务）
+STEP 2 — 人群框架：SSD / 躯体形式障碍 / 躯体化 / MUS / 躯体痛苦障碍 谱系
+STEP 3 — 评估工具：至少一个命名量表或结构化访谈（PHQ-15, SSS-8, SSD-12, SCID 等）
+STEP 4 — 研究设计：临床研究（排除动物/细胞、纯机制、纯 ML 模型）
+
+如需自定义纳入标准，请在此框内直接输入。留空 = 使用以上内置标准。" style="color:var(--text-tertiary)"></textarea>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <label for="excludeCriteria" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">
+        Exclusion Criteria (排除标准)
+      </label>
+      <textarea id="excludeCriteria" placeholder="留空即使用内置排除规则：
+• 综述/Meta分析/评论/社论/会议摘要
+• 病例报告 (N=1)
+• 动物实验/细胞实验
+• 纯机制研究 / 纯 ML 模型研究
+• 仅抑郁/焦虑中的躯体症状（未置于 SSD/somatoform/MUS 框架）
+• 纯专科疾病（IBS/CFS/fibromyalgia）未提及 SSD/MUS 框架
+• 仅生物标记物（fMRI/EEG/血液/基因），无临床评估工具
+
+留空 = 使用以上内置标准。" style="color:var(--text-tertiary)"></textarea>
+    </div>
+
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn-coral" id="btnPhase4" onclick="startPhase4()" disabled>Start Screening</button>
+      <span class="status-badge status-idle" id="phase4Badge">Idle</span>
+    </div>
+    <div class="progress-bar hidden" id="phase4Progress">
+      <div class="progress-fill" id="phase4ProgressFill" style="width:0%;background:var(--coral)"></div>
+    </div>
+    <p id="phase4Text" style="font-size:12px;color:var(--text-secondary)"></p>
+    <div class="row hidden" id="phase4Results" style="margin-top:12px">
+      <button class="btn-outline" onclick="downloadScreenedExcel()">Download Final Excel</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+
+let ws = null;
+let currentSummary = null;
+
+function log(msg, cls = 'log-info') {
+  const box = document.getElementById('logBox');
+  if (!box) return;
+  const time = new Date().toLocaleTimeString();
+  // Escape HTML special chars in the message to prevent injection and layout breakage
+  const safeMsg = String(msg).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  box.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">[${time}] ${safeMsg}</div>`);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logBox').innerHTML = '';
+  log('Log cleared', 'log-info');
+}
+
+function setStatus(text, cls) {
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+async function uploadCsv() {
+  const fileInput = document.getElementById('csvFile');
+  const file = fileInput.files[0];
+  if (!file) return alert('Select a CSV file first');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  setStatus('Uploading...', 'running');
+  log(`Uploading ${file.name}...`);
+
+  try {
+    const resp = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.error) {
+      log(data.error, 'log-error');
+      setStatus('Error', 'error');
+    } else {
+      const missingInfo = data.missing_doi > 0
+        ? `, <span style="color:var(--coral)">${data.missing_doi} missing DOI</span>`
+        : '';
+      document.getElementById('uploadStatus').innerHTML =
+        `${data.filename} — ${data.rows} rows, DOI column: ${data.has_doi_column ? 'Yes' : 'No'}${missingInfo}`;
+      log(`Uploaded: ${data.rows} rows`, 'log-success');
+      setStatus('Ready', 'idle');
+      var _btn = document.getElementById('btnStart');
+      _btn.textContent = 'Start Phase 1 (Sci-Hub)';
+
+      // Show DOI completion card if there are titles but missing DOIs
+      if (data.missing_doi > 0 && data.has_title_column) {
+        showDoiCompletionCard(data.missing_doi);
+      } else {
+        document.getElementById('btnStart').disabled = false;
+      }
+    }
+  } catch (e) {
+    log(`Upload failed: ${e.message}`, 'log-error');
+    setStatus('Error', 'error');
+  }
+}
+
+// ── DOI Completion by title ──────────────────────
+
+let doiCompletionData = null;
+let doiResolvedEdits = {};  // row_index → doi (manual edits)
+let doiIgnoredRows = new Set();  // row_index → true (user chose to ignore this paper)
+
+function showDoiCompletionCard(missingCount) {
+  const card = document.getElementById('doiCompletionCard');
+  card.classList.remove('hidden');
+  const info = document.getElementById('doiCompletionInfo');
+  info.innerHTML =
+    `<strong style="color:var(--coral)">${missingCount}</strong> paper(s) have a Title but no DOI. ` +
+    `Click below to search Crossref by title and automatically find matching DOIs.`;
+}
+
+async function startDoiCompletion() {
+  document.getElementById('btnDoiComplete').disabled = true;
+  document.getElementById('doiProgress').classList.remove('hidden');
+  document.getElementById('doiProgressFill').style.width = '5%';
+  document.getElementById('doiProgressText').textContent = 'Searching Crossref by title...';
+  log('Starting DOI completion (title → DOI search)...', 'log-info');
+
+  doiResolvedEdits = {};
+  doiIgnoredRows = new Set();
+
+  try {
+    const resp = await fetch(`${API}/api/doi-completion`, { method: 'POST' });
+    const data = await resp.json();
+
+    if (data.error) {
+      log(data.error, 'log-error');
+      document.getElementById('doiProgress').classList.add('hidden');
+      document.getElementById('btnDoiComplete').disabled = false;
+      return;
+    }
+
+    doiCompletionData = data;
+    document.getElementById('doiProgress').classList.add('hidden');
+    renderDoiResults(data);
+
+    const stats = data.stats || {};
+    log(
+      `DOI completion done: ${stats.matched_high || 0} high, ${stats.matched_medium || 0} medium, ${stats.matched_low || 0} low, ${stats.no_match || 0} no match`,
+      'log-success'
+    );
+
+    document.getElementById('btnStart').disabled = false; // can still proceed
+  } catch (e) {
+    log(`DOI completion failed: ${e.message}`, 'log-error');
+    document.getElementById('doiProgress').classList.add('hidden');
+    document.getElementById('btnDoiComplete').disabled = false;
+  }
+}
+
+function renderDoiResults(data) {
+  const area = document.getElementById('doiResultsArea');
+  area.classList.remove('hidden');
+  document.getElementById('btnDoiComplete').disabled = true;
+
+  const results = data.results || [];
+  const stats = data.stats || {};
+
+  // Summary
+  const autoAccepted = results.filter(r => r.resolved_doi).length;
+  const needsReview = results.length - autoAccepted - (stats.no_match || 0);
+  document.getElementById('doiSummary').textContent =
+    `${autoAccepted} auto-accepted · ${needsReview} need review · ${stats.no_match || 0} no match`;
+
+  // Filter dropdown — update option labels
+  const filter = document.getElementById('doiResultFilter');
+  filter.options[0].text = `All (${results.length})`;
+  filter.options[1].text = `High Confidence (auto-accepted)`;
+  filter.options[2].text = `Medium Confidence (needs review)`;
+  filter.options[3].text = `Low Confidence`;
+
+  // Table
+  const tbody = document.getElementById('doiResultsTable').querySelector('tbody');
+  tbody.innerHTML = '';
+
+  results.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.confidence = r.candidates.length > 0 ? r.candidates[0].confidence : 'no_match';
+    tr.dataset.rowIndex = r.row_index;
+
+    const best = r.candidates.length > 0 ? r.candidates[0] : null;
+
+    // Row number
+    const tdIdx = document.createElement('td');
+    tdIdx.textContent = (r.row_index + 1);
+    tr.appendChild(tdIdx);
+
+    // Title
+    const tdTitle = document.createElement('td');
+    tdTitle.textContent = r.title || '(no title)';
+    tdTitle.style.maxWidth = '300px';
+    tdTitle.style.overflow = 'hidden';
+    tdTitle.style.textOverflow = 'ellipsis';
+    tdTitle.style.whiteSpace = 'nowrap';
+    tdTitle.title = r.title;
+    tr.appendChild(tdTitle);
+
+    // Matched DOI
+    const tdDoi = document.createElement('td');
+    if (r.resolved_doi) {
+      tdDoi.innerHTML = `<code style="font-size:11px;background:#e1f5ee;padding:2px 6px;border-radius:4px;color:var(--green)">${r.resolved_doi}</code>`;
+      tdDoi.title = best ? `Matched: "${best.title}"` : '';
+    } else if (best) {
+      tdDoi.innerHTML = `<code style="font-size:11px">${best.doi}</code>`;
+      tdDoi.title = `Matched: "${best.title}" (score: ${best.score})`;
+    } else {
+      tdDoi.innerHTML = '<span style="color:var(--text-secondary);font-size:11px">—</span>';
+    }
+    tr.appendChild(tdDoi);
+
+    // Confidence
+    const tdConf = document.createElement('td');
+    if (best) {
+      const cls = `status-tag status-${
+        best.confidence === 'high' ? 'downloaded' : best.confidence === 'medium' ? 'manual' : 'missing'
+      }`;
+      const icon = best.confidence === 'high' ? '🔵' : best.confidence === 'medium' ? '🟡' : '🟠';
+      tdConf.innerHTML = `<span class="${cls}">${icon} ${best.confidence} (${best.score})</span>`;
+    } else {
+      tdConf.innerHTML = '<span class="status-tag status-missing">❌ no match</span>';
+    }
+    tr.appendChild(tdConf);
+
+    // Action
+    const tdAction = document.createElement('td');
+    const isIgnored = doiIgnoredRows.has(r.row_index);
+    if (isIgnored) {
+      tdAction.innerHTML =
+        `<span style="color:var(--text-secondary);font-size:11px">Ignored</span> ` +
+        `<button class="btn-sm btn-outline" onclick="toggleIgnoreDoi(${r.row_index})" style="font-size:10px">↩ Undo</button>`;
+    } else if (best && !r.resolved_doi) {
+      tdAction.innerHTML =
+        `<button class="btn-sm btn-green" onclick="acceptDoi(${r.row_index}, '${best.doi.replace(/'/g, "\\'")}')">Accept</button> ` +
+        `<button class="btn-sm btn-outline" onclick="editDoiManually(${r.row_index})">Edit</button> ` +
+        `<button class="btn-sm btn-outline" onclick="toggleIgnoreDoi(${r.row_index})" style="color:var(--text-secondary);font-size:10px">✕ Ignore</button>`;
+    } else if (r.resolved_doi) {
+      tdAction.innerHTML =
+        `<span style="color:var(--green);font-size:11px">✓ Accepted</span> ` +
+        `<button class="btn-sm btn-outline" onclick="editDoiManually(${r.row_index})">Edit</button>`;
+    } else {
+      tdAction.innerHTML =
+        `<button class="btn-sm btn-outline" onclick="editDoiManually(${r.row_index})">Manual Entry</button> ` +
+        `<button class="btn-sm btn-outline" onclick="toggleIgnoreDoi(${r.row_index})" style="color:var(--text-secondary);font-size:10px">✕ Ignore</button>`;
+    }
+    tr.appendChild(tdAction);
+
+    // Dim ignored rows
+    if (isIgnored) {
+      tr.style.opacity = '0.45';
+      tr.style.textDecoration = 'line-through';
+      tr.style.textDecorationColor = 'var(--text-secondary)';
+    }
+
+    // Also show candidates dropdown if there are multiple
+    if (best && r.candidates.length > 1 && !r.resolved_doi) {
+      const trCands = document.createElement('tr');
+      trCands.dataset.confidence = best.confidence;
+      trCands.dataset.rowIndex = r.row_index;
+      const tdCands = document.createElement('td');
+      tdCands.colSpan = 5;
+      tdCands.style.padding = '2px 12px 8px 30px';
+      tdCands.style.fontSize = '11px';
+      tdCands.style.color = 'var(--text-secondary)';
+
+      let candsHtml = 'Also found: ';
+      r.candidates.slice(1, 4).forEach((c, ci) => {
+        candsHtml +=
+          `<a href="#" onclick="acceptDoi(${r.row_index}, '${c.doi.replace(/'/g, "\\'")}');return false" ` +
+          `style="color:var(--accent);margin-right:8px;cursor:pointer" ` +
+          `title="Score: ${c.score} | ${c.title}">${c.doi}</a>`;
+      });
+      tdCands.innerHTML = candsHtml;
+      trCands.appendChild(tdCands);
+      tbody.appendChild(trCands);
+    }
+
+    tbody.appendChild(tr);
+  });
+
+  // Store row_index → candidates map for easier access
+  window._doiResultsMap = {};
+  results.forEach(r => { window._doiResultsMap[r.row_index] = r; });
+}
+
+function filterDoiResults() {
+  const filter = document.getElementById('doiResultFilter').value;
+  const rows = document.getElementById('doiResultsTable').querySelectorAll('tbody tr');
+  rows.forEach(tr => {
+    const conf = tr.dataset.confidence || '';
+    if (filter === 'all') {
+      tr.style.display = '';
+    } else if (filter === 'manual') {
+      tr.style.display = (doiResolvedEdits[tr.dataset.rowIndex] !== undefined) ? '' : 'none';
+    } else {
+      tr.style.display = (conf === filter) ? '' : 'none';
+    }
+  });
+}
+
+function acceptDoi(rowIndex, doi) {
+  const results = doiCompletionData?.results || [];
+  for (const r of results) {
+    if (r.row_index === rowIndex) {
+      r.resolved_doi = doi;
+      break;
+    }
+  }
+  renderDoiResults(doiCompletionData);
+  log(`DOI accepted for row ${rowIndex + 1}: ${doi}`, 'log-success');
+}
+
+function acceptAllHighConfidence() {
+  const results = doiCompletionData?.results || [];
+  let count = 0;
+  for (const r of results) {
+    if (r.candidates.length > 0 && r.candidates[0].confidence === 'high' && !r.resolved_doi) {
+      r.resolved_doi = r.candidates[0].doi;
+      count++;
+    }
+  }
+  renderDoiResults(doiCompletionData);
+  log(`Accepted ${count} high-confidence DOI matches`, 'log-success');
+}
+
+function toggleIgnoreDoi(rowIndex) {
+  if (doiIgnoredRows.has(rowIndex)) {
+    doiIgnoredRows.delete(rowIndex);
+    log(`Un-ignored row ${rowIndex + 1}`, 'log-info');
+  } else {
+    doiIgnoredRows.add(rowIndex);
+    const entry = window._doiResultsMap?.[rowIndex];
+    const title = entry?.title || `row ${rowIndex + 1}`;
+    log(`Ignored row ${rowIndex + 1}: ${title.substring(0, 60)}`, 'log-warning');
+  }
+  renderDoiResults(doiCompletionData);
+}
+
+function ignoreAllNoMatch() {
+  const results = doiCompletionData?.results || [];
+  let count = 0;
+  for (const r of results) {
+    if (r.candidates.length === 0 && !r.resolved_doi) {
+      doiIgnoredRows.add(r.row_index);
+      count++;
+    }
+  }
+  renderDoiResults(doiCompletionData);
+  log(`Ignored ${count} no-match rows (kept as no-DOI, will be skipped in Phase 1/2 for manual PDF later)`, 'log-warning');
+}
+
+function editDoiManually(rowIndex) {
+  const entry = window._doiResultsMap?.[rowIndex];
+  if (!entry) return;
+
+  const existingDoi = doiResolvedEdits[rowIndex] || entry.resolved_doi || '';
+  const newDoi = prompt(
+    `Enter DOI for row ${rowIndex + 1}:\n\nTitle: ${entry.title}`,
+    existingDoi
+  );
+  if (newDoi === null) return; // cancelled
+
+  if (newDoi.trim()) {
+    doiResolvedEdits[rowIndex] = newDoi.trim();
+    entry.resolved_doi = newDoi.trim();
+  } else {
+    delete doiResolvedEdits[rowIndex];
+    entry.resolved_doi = '';
+  }
+  renderDoiResults(doiCompletionData);
+}
+
+async function applyDoiCompletion() {
+  const results = doiCompletionData?.results || [];
+  // Collect all resolved DOIs (including auto-accepted and manually edited)
+  const resolved = [];
+  for (const r of results) {
+    const doi = r.resolved_doi || doiResolvedEdits[r.row_index];
+    if (doi) {
+      resolved.push({ row_index: r.row_index, doi });
+    }
+  }
+
+  document.getElementById('btnApplyDoi').disabled = true;
+  document.getElementById('doiApplyStatus').textContent = 'Applying DOIs...';
+
+  try {
+    const resp = await fetch(`${API}/api/doi-completion/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resolved,
+        ignored: Array.from(doiIgnoredRows),
+        skip_empty: false, // keep rows that still have DOIs from original CSV
+      }),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      document.getElementById('doiApplyStatus').innerHTML =
+        `<span style="color:var(--coral)">Error: ${data.error}</span>`;
+      document.getElementById('btnApplyDoi').disabled = false;
+      return;
+    }
+
+    document.getElementById('doiApplyStatus').innerHTML =
+      `<span style="color:var(--green)">✓ Saved: ${data.updated} DOI(s) updated` +
+      (data.ignored ? `, ${data.ignored} kept (no-DOI)` : '') +
+      ` → <code>${data.output_name}</code> ` +
+      `(${data.output_rows} rows ready for Phase 1)</span>`;
+
+    log(`DOI completion applied: ${data.updated} updated` + (data.ignored ? `, ${data.ignored} kept (no-DOI)` : '') + `, saved to ${data.output_name}`, 'log-success');
+
+    var _btn = document.getElementById('btnStart');
+    _btn.textContent = 'Start Phase 1 (Sci-Hub)';
+    _btn.disabled = false;
+
+    // Show completion in upload status
+    const uploadEl = document.getElementById('uploadStatus');
+    uploadEl.innerHTML +=
+      `<br><span style="color:var(--green)">→ DOI completion saved to ${data.output_name}</span>`;
+  } catch (e) {
+    document.getElementById('doiApplyStatus').innerHTML =
+      `<span style="color:var(--coral)">Failed: ${e.message}</span>`;
+    document.getElementById('btnApplyDoi').disabled = false;
+  }
+}
+
+async function startPipeline() {
+  document.getElementById('btnStart').disabled = true;
+  setStatus('Phase 1 starting...', 'running');
+  log('Starting Phase 1 (Sci-Hub download)...', 'log-info');
+  document.getElementById('progressBar').classList.remove('hidden');
+
+  try {
+    const resp = await fetch(`${API}/api/run`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      log(data.error, 'log-error');
+      setStatus('Error', 'error');
+      document.getElementById('btnStart').disabled = false;
+    } else {
+      log('Phase 1 (Sci-Hub) started', 'log-success');
+      setStatus('Phase 1 running', 'running');
+    }
+  } catch (e) {
+    log(`Start failed: ${e.message}`, 'log-error');
+    document.getElementById('btnStart').disabled = false;
+  }
+}
+
+// ── Phase 2: institutional access (campus VPN client / library WebVPN) ──
+
+const PKU_PORTAL = 'https://wpn.pku.edu.cn';
+let phase2Provider = 'pku_client';  // default: campus VPN client (IP auth)
+
+function getPhase2ProviderLabel() {
+  return phase2Provider === 'pku_client' ? '校内 VPN 直连' : '北大图书馆 WebVPN';
+}
+
+function onPhase2ProviderChange() {
+  phase2Provider = document.getElementById('phase2ProviderSelect').value;
+  updatePhase2ProviderUI();
+  log(`Phase 2 访问通道切换为: ${getPhase2ProviderLabel()}`, 'log-info');
+  loadPhase2ProviderState();
+}
+
+function updatePhase2ProviderUI() {
+  const howTo = document.getElementById('webvpnCookieHowTo');
+  if (howTo) {
+    if (phase2Provider === 'pku_client') {
+      howTo.innerHTML =
+        '<strong>校内 VPN 客户端直连模式:</strong><br>' +
+        '1. 启动并登录北大 VPN 客户端（<a href="https://vpn.pku.edu.cn" target="_blank">vpn.pku.edu.cn</a>）<br>' +
+        '2. 浏览器直接打开出版商网站确认可访问（如 sciencedirect.com）<br>' +
+        '3. 无需 cookies — 直接点击 <strong>Step 2: Execute Phase 2</strong>';
+    } else {
+      howTo.innerHTML =
+        '<strong>How to get cookies (北大图书馆):</strong><br>' +
+        `1. Open <a href="${PKU_PORTAL}" target="_blank">${PKU_PORTAL}</a> in your browser<br>` +
+        '2. Log in with PKU credentials (iaaa)<br>' +
+        '3. Open DevTools (F12) → Application → Cookies<br>' +
+        '4. Paste cookies below (one per line: <code>name=value</code>)';
+    }
+  }
+  const instr = document.getElementById('phase2Instructions');
+  if (instr) {
+    if (phase2Provider === 'pku_client') {
+      instr.innerHTML =
+        '<strong>校内 VPN 直连</strong>：启动并登录北大 VPN 客户端' +
+        '（<a href="https://vpn.pku.edu.cn" target="_blank" style="color:var(--accent)">vpn.pku.edu.cn</a>），' +
+        '无需浏览器登录，直接点击 <strong>Step 2</strong> 以校内 IP 下载。' +
+        '切换为 <strong>北大 WebVPN</strong> 通道时，Step 1 会启动 Chrome 完成登录后关闭窗口保存 cookies。';
+    } else {
+      instr.innerHTML =
+        '<strong>Step 1</strong> launches Chrome for auto-login at wpn.pku.edu.cn (PKU iaaa).' +
+        ' Complete login, then <strong>close the browser window</strong> to auto-save cookies.' +
+        ' Use <strong>Manual Config</strong> if auto-login is unavailable.' +
+        ' <strong>Step 2</strong> retries failed papers through the PKU library proxy.';
+    }
+  }
+}
+
+async function loadPhase2ProviderState() {
+  try {
+    const resp = await fetch(`${API}/api/phase2/config`);
+    const data = await resp.json();
+    // Sync the dropdown to the backend's active provider
+    if (data.provider && document.getElementById('phase2ProviderSelect')) {
+      document.getElementById('phase2ProviderSelect').value = data.provider;
+      phase2Provider = data.provider;
+    }
+    updatePhase2ProviderUI();
+    const badge = document.getElementById('webvpnBadge');
+    if (phase2Provider === 'pku_client') {
+      badge.textContent = '校内 VPN 直连 (IP 认证)';
+      badge.className = 'status-badge status-done';
+      document.getElementById('btnPhase2').disabled = false;
+    } else if (data.configured) {
+      badge.textContent = 'Configured (PKU)';
+      badge.className = 'status-badge status-done';
+      document.getElementById('btnPhase2').disabled = false;
+    } else {
+      badge.textContent = 'Not configured';
+      badge.className = 'status-badge status-idle';
+    }
+  } catch (e) { /* server not ready yet */ }
+}
+
+async function autoLoginWebvpn() {
+  const btn = document.getElementById('btnAutoLogin');
+  const provLabel = getPhase2ProviderLabel();
+
+  if (phase2Provider === 'pku_client') {
+    log('校内 VPN 直连模式无需浏览器登录 — 请确保 VPN 客户端已连接并登录，然后直接点击 Step 2。', 'log-info');
+    setWebvpnStatus('VPN client mode', 'idle');
+    document.getElementById('btnPhase2').disabled = false;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Waiting for browser close...';
+  setWebvpnStatus('Waiting for login', 'running');
+  log(`Launching Chrome for ${provLabel} auto-login...`, 'log-info');
+  log('Complete your login in the browser, then CLOSE the browser window to save cookies.', 'log-info');
+
+  try {
+    const resp = await fetch(`${API}/api/phase2/auto-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: phase2Provider }),
+    });
+    const data = await resp.json();
+
+    if (data.status === 'ok') {
+      log(`✓ ${provLabel} auto-login successful! Captured ${data.cookie_count} cookies.`, 'log-success');
+      setWebvpnStatus('Configured', 'done');
+      document.getElementById('btnPhase2').disabled = false;
+      document.getElementById('phase2Instructions').innerHTML =
+        `<span style="color:var(--green)">✓ ${provLabel} configured.</span> Click <strong>Step 2</strong> to retry failed papers via library proxy.`;
+    } else {
+      log(`Auto-login failed: ${data.message}`, 'log-error');
+      log('You can still configure manually using the "Manual Config" button.', 'log-warn');
+      setWebvpnStatus('Login failed', 'error');
+    }
+  } catch (e) {
+    log(`Auto-login error: ${e.message}`, 'log-error');
+    setWebvpnStatus('Error', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔑 Step 1: Auto Login (Chrome)';
+  }
+}
+
+function configureWebvpn() {
+  const panel = document.getElementById('webvpnCookiePanel');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) {
+    updatePhase2ProviderUI();
+    log(`WebVPN cookie panel opened — paste your ${phase2Provider.toUpperCase()} WebVPN cookies`, 'log-info');
+  }
+}
+
+async function saveWebvpnCookies() {
+  const raw = document.getElementById('webvpnCookieInput').value.trim();
+  if (!raw) {
+    log('No cookies entered. Paste cookies from your browser first.', 'log-warn');
+    return;
+  }
+
+  // Parse cookies: one per line, "name=value" format
+  const cookies = {};
+  for (const line of raw.split('\n')) {
+    const eq = line.indexOf('=');
+    if (eq > 0) {
+      const name = line.substring(0, eq).trim();
+      const value = line.substring(eq + 1).trim();
+      if (name) cookies[name] = value;
+    }
+  }
+
+  if (Object.keys(cookies).length === 0) {
+    log('No valid cookies found. Use format: name=value (one per line)', 'log-warn');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${API}/api/phase2/configure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookies, provider: phase2Provider }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      log(`Cookie save failed: ${data.error}`, 'log-error');
+    } else {
+      log(`${data.provider.toUpperCase()} WebVPN configured: ${data.cookie_count} cookies saved`, 'log-success');
+      setWebvpnStatus('Configured', 'done');
+      document.getElementById('btnPhase2').disabled = false;
+      document.getElementById('phase2Instructions').innerHTML =
+        `<span style="color:var(--green)">✓ ${data.provider.toUpperCase()} WebVPN configured.</span> Click <strong>Step 2</strong> to retry failed papers via library proxy.`;
+    }
+  } catch (e) {
+    log(`Cookie save error: ${e.message}`, 'log-error');
+  }
+}
+
+async function testWebvpnConnection() {
+  const result = document.getElementById('webvpnTestResult');
+  result.textContent = 'Testing...';
+  result.style.color = 'var(--text-secondary)';
+
+  try {
+    const resp = await fetch(`${API}/api/phase2/test`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.session === 'valid') {
+      result.textContent = '✓ Session valid — library proxy reachable';
+      result.style.color = 'var(--green)';
+    } else if (data.session === 'expired') {
+      result.textContent = '✗ Session expired — re-login (Step 1)';
+      result.style.color = 'var(--coral)';
+    } else if (data.session === 'none') {
+      result.textContent = '✗ No cookies saved yet';
+      result.style.color = 'var(--coral)';
+    } else {
+      result.textContent = '? Portal unreachable (check network/VPN)';
+      result.style.color = 'var(--text-secondary)';
+    }
+  } catch (e) {
+    result.textContent = `Error: ${e.message}`;
+    result.style.color = 'var(--coral)';
+  }
+}
+
+async function startPhase2() {
+  document.getElementById('btnPhase2').disabled = true;
+  setPhase2Status('Starting...', 'running');
+  const provLabel = getPhase2ProviderLabel();
+  log(`Starting Phase 2 (${provLabel})...`, 'log-info');
+  document.getElementById('progressBar').classList.remove('hidden');
+  updateProgress(55);
+
+  try {
+    const resp = await fetch(`${API}/api/phase2/start`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      log(data.error, 'log-error');
+      setPhase2Status('Error', 'error');
+      document.getElementById('btnPhase2').disabled = false;
+    } else {
+      log(`Phase 2 started — ${data.failed_count} papers queued for ${provLabel} retry`, 'log-success');
+      setPhase2Status('Running', 'running');
+      document.getElementById('btnConfigWebvpn').disabled = true;
+    }
+  } catch (e) {
+    log(`Phase 2 start failed: ${e.message}`, 'log-error');
+    setPhase2Status('Error', 'error');
+    document.getElementById('btnPhase2').disabled = false;
+  }
+}
+
+function setPhase2Status(text, cls) {
+  const badge = document.getElementById('phase2Badge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+function setWebvpnStatus(text, cls) {
+  const badge = document.getElementById('webvpnBadge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+function enablePhase2Buttons() {
+  // Configure button is always available, Execute enabled when cookies are set
+  document.getElementById('btnConfigWebvpn').disabled = false;
+  document.getElementById('btnPhase2').disabled = false;
+}
+
+let _prereqPollTimer = null;
+function startPrereqPolling() {
+  if (_prereqPollTimer) return;  // Already polling
+  loadPhase2ProviderState();
+  _prereqPollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch(`${API}/api/phase2/status`);
+      const data = await resp.json();
+      const badge = document.getElementById('webvpnBadge');
+      if (data.provider === 'pku_client') {
+        badge.textContent = '校内 VPN 直连 (IP 认证)';
+        badge.className = 'status-badge status-done';
+      } else if (data.configured) {
+        badge.textContent = `Configured (${data.provider_label || data.provider || ''})`;
+        badge.className = 'status-badge status-done';
+      } else {
+        badge.textContent = 'Not configured';
+        badge.className = 'status-badge status-idle';
+      }
+    } catch (e) { /* ignore poll errors */ }
+  }, 5000);
+}
+
+function toggleWebvpnGuide() {
+  const body = document.getElementById('webvpnGuideBody');
+  const toggle = document.getElementById('webvpnGuideToggle');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    toggle.textContent = '📘 Phase 2 Guide (click to collapse)';
+  } else {
+    body.classList.add('collapsed');
+    toggle.textContent = '📘 Phase 2 Guide (click to expand)';
+  }
+}
+
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/ws/progress`;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    log('WebSocket connected', 'log-success');
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    log('WebSocket disconnected. Reconnecting in 3s...', 'log-warn');
+    setTimeout(connectWebSocket, 3000);
+  };
+
+  ws.onerror = () => {
+    log('WebSocket error', 'log-error');
+  };
+}
+
+function handleMessage(msg) {
+  const type = msg.type;
+  const data = msg.data || {};
+  const state = msg.state || {};
+
+  switch (type) {
+    case 'connected':
+      log('Connected to pipeline');
+      updateFromState(state);
+      break;
+
+    case 'reading_csv':
+      log(`Reading CSV: ${data.file}`, 'log-info');
+      break;
+
+    // ── DOI Completion progress ──
+    case 'doi_completion_start':
+      log(`🔍 ${data.message}`, 'log-info');
+      break;
+
+    case 'doi_completion':
+      if (data.phase === 'searching') {
+        // Searching a specific title — show in log panel
+        log(data.message, 'log-info');
+      } else if (data.phase === 'found') {
+        const confEmoji = data.confidence === 'high' ? '🟢' : data.confidence === 'medium' ? '🟡' : '🟠';
+        log(`${confEmoji} ${data.message}`, data.confidence === 'high' ? 'log-success' : 'log-warning');
+      } else if (data.phase === 'not_found') {
+        log(`❌ ${data.message}`, 'log-error');
+      }
+      // Update progress bar
+      if (data.current && data.total) {
+        const pct = Math.round((data.current / data.total) * 100);
+        const fill = document.getElementById('doiProgressFill');
+        const text = document.getElementById('doiProgressText');
+        if (fill) fill.style.width = pct + '%';
+        if (text) text.textContent = `Searching: ${data.current}/${data.total}`;
+      }
+      break;
+
+    case 'doi_completion_finish':
+      log(`✅ ${data.message}`, 'log-success');
+      break;
+
+    case 'phase1_start':
+      log(`Phase 1 (Sci-Hub) starting: ${data.total} papers`, 'log-info');
+      document.getElementById('phase1Dot').classList.add('active');
+      updateProgress(5);
+      break;
+
+    case 'phase1_progress':
+      updateProgress(5 + (data.current / data.total) * 45);
+      var statusIcon = data.status === 'downloaded' ? 'OK' : '✗';
+      var logCls = data.status === 'downloaded' ? 'log-success' : 'log-error';
+      log(`  [${data.current}/${data.total}] ${statusIcon} ${data.doi} — ${data.route || data.status}`, logCls);
+      break;
+
+    case 'phase1_done':
+      log(`Phase 1 done: ${data.downloaded || data.p1_downloaded || 0} papers downloaded`, 'log-success');
+      document.getElementById('phase1Dot').classList.remove('active');
+      document.getElementById('phase1Dot').classList.add('done');
+      updateProgress(50);
+      updateStats(null, null, data.downloaded || data.p1_downloaded || 0, null, null);
+      break;
+
+    case 'phase1_complete_awaiting_p2':
+      log(`Phase 1 complete! ${data.p1_downloaded || 0} papers downloaded via Sci-Hub.`, 'log-success');
+      log(`⏸ ${data.failed_count} papers need Phase 2 (PKU Library WebVPN).`, 'log-warn');
+      log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'log-info');
+      log('📋 Next steps:', 'log-info');
+      log('   Step 1: Click "Auto Login" to sign in to PKU WebVPN (wpn.pku.edu.cn)', 'log-info');
+      log('   Step 2: Click "Execute Phase 2" to retry via WebVPN', 'log-info');
+      log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'log-info');
+      document.getElementById('phase1Dot').classList.remove('active');
+      document.getElementById('phase1Dot').classList.add('done');
+      document.getElementById('phase2Dot').classList.add('active');
+      updateProgress(50);
+      updateStats(null, data.p1_downloaded || 0, data.p1_downloaded || 0, null, null);
+
+      document.getElementById('phase2Card').classList.remove('hidden');
+      document.getElementById('phase2NonOaText').textContent =
+        `${data.failed_count} papers waiting for Phase 2 (PKU Library WebVPN)`;
+      document.getElementById('resultsCard').classList.remove('hidden');
+      loadResults();
+      enablePhase2Buttons();
+      setStatus('Awaiting Phase 2', 'idle');
+      document.getElementById('btnStart').disabled = false;
+      break;
+
+    case 'phase2_prerequisites':
+      log(`Phase 2 ready: ${data.failed_count} papers queued for WebVPN retry`, 'log-success');
+      document.getElementById('phase2Dot').classList.add('active');
+      break;
+
+    case 'phase2_warning':
+      log(`⚠ ${data.message}`, 'log-warn');
+      break;
+
+    case 'phase2_start':
+      log(`Phase 2 (WebVPN) starting: ${data.total} papers`, 'log-info');
+      setPhase2Status('Running', 'running');
+      updateProgress(55);
+      break;
+
+    case 'phase2_progress':
+      updateProgress(55 + (data.total ? data.current / data.total * 35 : 0));
+      if (data.status === 'manual_phase_start') {
+        log(`── 进入半自动下载阶段（${data.manual_total || '?'} 篇需人工验证：Elsevier/MDPI/APA）──`, 'log-info');
+        setPhase2Status('Semi-Manual', 'running');
+        break;
+      }
+      if (data.status === 'manual_waiting') {
+        var mi = data.manual_index || '?';
+        var mt = data.manual_total || '?';
+        log(`  [半自动 ${mi}/${mt}] ⏳ ${data.doi} — 等待人工操作（请在浏览器中完成验证并点击 Download PDF）`, 'log-warn');
+        if (data.downloaded !== undefined) {
+          document.getElementById('statPhase2').textContent = data.downloaded;
+        }
+        break;
+      }
+      if (data.status === 'already_downloaded') {
+        var titleText = data.title ? data.title.slice(0, 50) : '';
+        var displayText = titleText ? `${titleText} (${data.doi})` : data.doi;
+        log(`  [${data.current}/${data.total}] ⏭ ${displayText} — 已下载(跳过)`, 'log-info');
+        if (data.downloaded !== undefined) {
+          document.getElementById('statPhase2').textContent = data.downloaded;
+        }
+        break;
+      }
+      var statusIcon = data.status === 'downloaded' ? 'OK' : '✗';
+      var logCls = data.status === 'downloaded' ? 'log-success' : 'log-error';
+      var stageTag = data.stage === 'semi_manual' ? '[半自动] ' : '';
+      var titleText = data.title ? data.title.slice(0, 50) : '';
+      var displayText = titleText ? `${titleText} (${data.doi})` : data.doi;
+      log(`  [${data.current}/${data.total}] ${statusIcon} ${stageTag}${displayText} — ${data.status}`, logCls);
+      if (data.downloaded !== undefined) {
+        document.getElementById('statPhase2').textContent = data.downloaded;
+      }
+      break;
+
+    case 'phase2_skipped':
+      log(`Phase 2 skipped: ${data.reason}`, 'log-warn');
+      document.getElementById('phase2Dot').classList.remove('active');
+      updateProgress(55);
+      setPhase2Status('Skipped', 'error');
+      break;
+
+    case 'phase2_error':
+      log(`Phase 2 error: ${data.error}`, 'log-error');
+      setPhase2Status('Error', 'error');
+      document.getElementById('btnPhase2').disabled = false;
+      document.getElementById('btnConfigWebvpn').disabled = false;
+      break;
+
+    case 'phase2_done':
+      log(`Phase 2 done: ${data.downloaded || 0} papers downloaded via WebVPN`, 'log-success');
+      document.getElementById('phase2Dot').classList.remove('active');
+      document.getElementById('phase2Dot').classList.add('done');
+      setPhase2Status('Done', 'done');
+      document.getElementById('btnPhase2').disabled = true;
+      document.getElementById('btnConfigWebvpn').disabled = true;
+      updateProgress(90);
+      break;
+
+    case 'merging':
+      log('Merging Phase 1 + Phase 2 results...', 'log-info');
+      updateProgress(90);
+      break;
+
+    case 'results_updated':
+      // A PDF was manually added — refresh the results display
+      log(`PDF manually added for ${data.doi} (${data.action})`, 'log-success');
+      loadResults();
+      break;
+
+    case 'completed':
+      currentSummary = data;
+      updateProgress(100);
+      updateStats(
+        data.total_papers,
+        data.downloaded,
+        data.phase1_downloaded || 0,
+        data.phase2_downloaded || 0,
+        (data.not_oa_or_no_access || 0) + (data.download_failed || 0)
+      );
+      document.getElementById('phase2Dot').classList.remove('active');
+      document.getElementById('phase2Dot').classList.add('done');
+      setStatus('Done', 'done');
+      setPhase2Status('Done', 'done');
+      document.getElementById('btnStart').disabled = false;
+      // ── Show Phase 3 card now that downloads are complete ──
+      document.getElementById('phase3Card').classList.remove('hidden');
+      document.getElementById('btnPhase3').disabled = false;
+      document.getElementById('resultsCard').classList.remove('hidden');
+      log(`Pipeline complete! ${data.downloaded || 0}/${data.total_papers || 0} downloaded. CSV: ${data.final_csv || ''}`, 'log-success');
+      log('── You can now manually add missing PDFs, then start Phase 3 (OCR) ──', 'log-warn');
+      loadResults();
+      break;
+
+    case 'error':
+      log(`Error: ${data.error}`, 'log-error');
+      setStatus('Error', 'error');
+      document.getElementById('btnStart').disabled = false;
+      break;
+
+    case 'phase3_starting':
+      log(`Phase 3 starting: PDFs from ${data.papers_dir} → MD to ${data.ocr_output}`, 'log-info');
+      document.getElementById('phase3Dot').classList.add('active');
+      setPhase3Status('Starting...', 'running');
+      document.getElementById('phase3Progress').classList.remove('hidden');
+      updatePhase3Progress(5);
+      break;
+
+    case 'phase3_preparing':
+      log(`Phase 3: ${data.downloaded} downloaded, ${data.pdfs_on_disk} PDFs on disk`, 'log-info');
+      updatePhase3Progress(10);
+      break;
+
+    case 'phase3_running':
+      log(`MinerU processing ${data.total_pdfs} PDFs...`, 'log-info');
+      setPhase3Status('MinerU running...', 'running');
+      updatePhase3Progress(20);
+      break;
+
+    case 'phase3_log':
+      // Show every MinerU stdout line for full transparency
+      log(`[MinerU] ${data.line}`, 'log-info');
+      updatePhase3Progress(Math.min(20 + (Math.min(data.line_count || 0, 200) / 200) * 60, 80));
+      break;
+
+    case 'phase3_warning':
+      log(`Phase 3 warning: ${data.message}`, 'log-warn');
+      break;
+
+    case 'phase3_done':
+      log('MinerU processing complete', 'log-success');
+      updatePhase3Progress(85);
+      break;
+
+    case 'phase3_generating_excel':
+      log('Generating final Excel...', 'log-info');
+      updatePhase3Progress(90);
+      break;
+
+    case 'phase3_completed':
+      log(`Phase 3 complete! OCR: ${data.ocr_success}/${data.ocr_attempted} success. Excel: ${data.excel_path}`, 'log-success');
+      updatePhase3Progress(100);
+      setPhase3Status('Done', 'done');
+      document.getElementById('phase3Dot').classList.remove('active');
+      document.getElementById('phase3Dot').classList.add('done');
+      document.getElementById('btnPhase3').disabled = false;
+      // ── Show Phase 4 card now that OCR is complete ──
+      document.getElementById('phase4Card').classList.remove('hidden');
+      document.getElementById('btnPhase4').disabled = false;
+      document.getElementById('phase3Results').classList.remove('hidden');
+      if (data.ocr_success !== undefined) {
+        document.getElementById('statOcr').textContent = data.ocr_success;
+      }
+      log('── OCR done. You can now start Phase 4 (LLM Screening) ──', 'log-info');
+      break;
+
+    case 'phase3_error':
+      log(`Phase 3 error: ${data.error}`, 'log-error');
+      setPhase3Status('Error', 'error');
+      document.getElementById('phase3Dot').classList.remove('active');
+      document.getElementById('btnPhase3').disabled = false;
+      break;
+
+    // ── Phase 4: LLM Screening ──
+    case 'phase4_starting':
+      log(`Phase 4 starting: model=${data.model}, MD files from ${data.mineru_dir}`, 'log-info');
+      document.getElementById('phase4Dot').classList.add('active');
+      setPhase4Status('Starting...', 'running');
+      document.getElementById('phase4Progress').classList.remove('hidden');
+      updatePhase4Progress(2);
+      break;
+
+    case 'phase4_screening':
+      log(`Phase 4: screening ${data.total} papers with LLM...`, 'log-info');
+      setPhase4Status('Screening...', 'running');
+      updatePhase4Progress(5);
+      break;
+
+    case 'phase4_progress':
+      updatePhase4Progress(data.pct);
+      document.getElementById('phase4Text').textContent =
+        `Screening: ${data.current}/${data.total} | Incl: ${data.include} | Excl: ${data.exclude} | Uncert: ${data.uncertain || 0} | Skip: ${data.skip} | Err: ${data.error}`;
+      // Log every paper with decision and reason
+      var decIcon = data.decision === 'Include' ? '✓ Include' :
+                    data.decision === 'Exclude' ? '✗ Exclude' :
+                    data.decision === 'Uncertain' ? '? Uncertain' :
+                    data.decision === 'Skip' ? '— Skip' : '? ' + (data.decision || '?');
+      var decCls = data.decision === 'Include' ? 'log-success' :
+                   data.decision === 'Exclude' ? 'log-error' :
+                   data.decision === 'Uncertain' ? 'log-warn' :
+                   data.decision === 'Skip' ? 'log-warn' : 'log-info';
+      var shrunkDoi = (data.current_doi || '').substring(0, 35);
+      var reasonBrief = (data.reason || '').substring(0, 100);
+      log(`  [${data.current}/${data.total}] ${decIcon} | ${shrunkDoi} | ${reasonBrief}`, decCls);
+      break;
+
+    case 'phase4_retry':
+      log(`Phase 4: retry round ${data.round}/${data.max_rounds} — ${data.count} errored paper(s)`, 'log-warn');
+      break;
+
+    case 'phase4_retry_progress':
+      var rDecIcon = data.decision === 'Include' ? '✓ Include' :
+                     data.decision === 'Exclude' ? '✗ Exclude' :
+                     data.decision === 'Uncertain' ? '? Uncertain' : '✗ 仍失败';
+      var rDecCls = data.decision === 'Include' ? 'log-success' :
+                    data.decision === 'Exclude' ? 'log-error' : 'log-warn';
+      var rDoi = (data.doi || '').substring(0, 35);
+      var rReason = (data.reason || '').substring(0, 100);
+      log(`  [重试 ${data.round}/${data.max_rounds}] [${data.current}/${data.total}] ${rDecIcon} | ${rDoi} | ${rReason}`, rDecCls);
+      break;
+
+    case 'phase4_completed':
+      log(`Phase 4 complete! Include: ${data.included}, Exclude: ${data.excluded}, Uncertain: ${data.uncertain || 0}, Skip: ${data.skipped}, Error: ${data.errors}`, 'log-success');
+      updatePhase4Progress(100);
+      setPhase4Status('Done', 'done');
+      document.getElementById('phase4Dot').classList.remove('active');
+      document.getElementById('phase4Dot').classList.add('done');
+      document.getElementById('btnPhase4').disabled = false;
+      document.getElementById('phase4Results').classList.remove('hidden');
+      if (data.included !== undefined) {
+        document.getElementById('statScreened').textContent = data.included;
+      }
+      break;
+
+    case 'phase4_error':
+      log(`Phase 4 error: ${data.error}`, 'log-error');
+      setPhase4Status('Error', 'error');
+      document.getElementById('phase4Dot').classList.remove('active');
+      document.getElementById('btnPhase4').disabled = false;
+      break;
+
+    case 'pong':
+      break;
+  }
+
+  updateFromState(state);
+}
+
+function updateFromState(state) {
+  if (state.phase1_stats) {
+    document.getElementById('phase1Dot').classList.add('done');
+    document.getElementById('phase1Dot').classList.remove('active');
+    // Restore Phase 1 stats display
+    var p1s = state.phase1_stats;
+    updateStats(p1s.total, p1s.downloaded, p1s.downloaded, null, p1s.download_failed);
+    updateProgress(50);
+    setStatus('Phase 1 complete', 'done');
+  }
+  if (state.phase2_stats) {
+    document.getElementById('phase2Dot').classList.add('done');
+    document.getElementById('phase2Dot').classList.remove('active');
+  }
+  if (state.summary) {
+    currentSummary = state.summary;
+    document.getElementById('resultsCard').classList.remove('hidden');
+    // Phase 1+2 complete → show Phase 3
+    document.getElementById('phase3Card').classList.remove('hidden');
+    document.getElementById('btnPhase3').disabled = false;
+    loadResults();
+  }
+  // If Phase 1 completed but Phase 2 is pending, show the Phase 2 card only
+  if (state.status === 'awaiting_phase2' && state.phase1_complete) {
+    document.getElementById('phase2Card').classList.remove('hidden');
+    document.getElementById('phase2NonOaText').textContent =
+      `${state.failed_count || state.non_oa_count || '?'} papers waiting for Phase 2 (library WebVPN)`;
+    document.getElementById('phase2Dot').classList.add('active');
+    // Phase 3 stays hidden until downloads are complete
+    document.getElementById('resultsCard').classList.remove('hidden');
+    enablePhase2Buttons();
+    // Phase 1 already finished — disable re-run instead of leaving it clickable
+    var _btnStart = document.getElementById('btnStart');
+    _btnStart.disabled = true;
+    _btnStart.textContent = 'Phase 1 Done';
+    loadResults();
+    startPrereqPolling();
+  }
+  if (state.phase3_complete) {
+    document.getElementById('phase3Dot').classList.add('done');
+    document.getElementById('phase3Dot').classList.remove('active');
+    document.getElementById('phase4Card').classList.remove('hidden');
+    document.getElementById('btnPhase4').disabled = false;
+  }
+  if (state.phase4_complete) {
+    document.getElementById('phase4Dot').classList.add('done');
+    document.getElementById('phase4Dot').classList.remove('active');
+  }
+}
+
+function updateProgress(pct) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `Progress: ${pct}%`;
+}
+
+function updateStats(total, downloaded, p1, p2, failed) {
+  if (total !== null) document.getElementById('statTotal').textContent = total;
+  if (downloaded !== null) document.getElementById('statDownloaded').textContent = downloaded;
+  if (p1 !== null) document.getElementById('statPhase1').textContent = p1;
+  if (p2 !== null) document.getElementById('statPhase2').textContent = p2;
+  if (failed !== null) document.getElementById('statFailed').textContent = failed;
+}
+
+// ── Results Display ──────────────────────────────
+
+let _allPapers = [];
+let _resultsSummary = {};
+
+async function loadResults() {
+  try {
+    const resp = await fetch(`${API}/api/results`);
+    const data = await resp.json();
+    if (!data.papers || data.papers.length === 0) return;
+
+    _allPapers = data.papers;
+    _resultsSummary = data.summary;
+
+    // Save CSV name for legacy download
+    window._resultFile = data.summary.csv_name;
+
+    // Update summary stats
+    document.getElementById('statResultDownloaded').textContent = data.summary.downloaded;
+    document.getElementById('statResultMissing').textContent = data.summary.missing;
+    document.getElementById('statResultCoverage').textContent = data.summary.coverage_pct + '%';
+    document.getElementById('statResultManual').textContent =
+      (data.summary.status_counts && data.summary.status_counts['manual_added']) || 0;
+
+    // Update the "next step" coverage prompt (visible when Phase 3 card is shown)
+    document.getElementById('resultsCoveragePct').textContent = data.summary.coverage_pct + '%';
+    var phase3Visible = !document.getElementById('phase3Card').classList.contains('hidden');
+    document.getElementById('resultsNextStep').classList.toggle('hidden', !phase3Visible);
+
+    filterResults();
+  } catch (e) {
+    log(`Failed to load results: ${e.message}`, 'log-error');
+  }
+}
+
+function filterResults() {
+  const filter = document.getElementById('resultFilter').value;
+  const search = (document.getElementById('resultSearch').value || '').toLowerCase();
+
+  let filtered = _allPapers;
+  if (filter === 'has_pdf') {
+    filtered = _allPapers.filter(p =>
+      ['downloaded', 'already_downloaded', 'manual_added'].includes(p.status));
+  } else if (filter === 'missing') {
+    filtered = _allPapers.filter(p =>
+      !['downloaded', 'already_downloaded', 'manual_added'].includes(p.status));
+  } else if (filter !== 'all') {
+    filtered = _allPapers.filter(p => p.status === filter);
+  }
+
+  if (search) {
+    filtered = filtered.filter(p =>
+      (p.doi || '').toLowerCase().includes(search) ||
+      (p.title || '').toLowerCase().includes(search) ||
+      (p.first_author || '').toLowerCase().includes(search)
+    );
+  }
+
+  document.getElementById('filterCount').textContent = `${filtered.length} papers`;
+
+  const tbody = document.querySelector('#resultsTable tbody');
+  tbody.innerHTML = '';
+
+  // Show max 200 rows in UI for performance
+  const maxShow = 200;
+  const showRows = filtered.slice(0, maxShow);
+
+  for (const p of showRows) {
+    const tr = document.createElement('tr');
+    const status = p.status || '';
+    const statusLabel = statusBadge(status);
+    const hasPdf = ['downloaded', 'already_downloaded', 'manual_added'].includes(status);
+
+    const cells = [
+      (p.doi || '').slice(0, 40),
+      (p.title || '').slice(0, 70),
+      (p.first_author || '').slice(0, 20),
+      (p.year || ''),
+      statusLabel,
+    ];
+
+    cells.forEach(c => {
+      const td = document.createElement('td');
+      td.innerHTML = c;
+      tr.appendChild(td);
+    });
+
+    // Action button
+    const tdAction = document.createElement('td');
+    if (!hasPdf && p.doi) {
+      const escapedDoi = escapeHtml(p.doi);
+      const escapedTitle = escapeHtml(p.title || '');
+      const isNoDoi = p.doi.startsWith('NO_DOI_');
+      const label = isNoDoi ? '+ Add PDF (无DOI)' : '+ Add PDF';
+      tdAction.innerHTML = `<button class="btn-add-pdf btn-sm" onclick="openUploadModal('${escapedDoi}', '${escapedTitle}')">${label}</button>`;
+    }
+    tr.appendChild(tdAction);
+
+    tbody.appendChild(tr);
+  }
+
+  if (filtered.length > maxShow) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6;
+    td.style.cssText = 'text-align:center;color:var(--text-secondary);padding:10px';
+    td.textContent = `... and ${filtered.length - maxShow} more (use filter/search or download Excel)`;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
+function statusBadge(status) {
+  const map = {
+    'downloaded':       '<span class="status-tag status-downloaded">downloaded</span>',
+    'already_downloaded': '<span class="status-tag status-downloaded">already downloaded</span>',
+    'manual_added':     '<span class="status-tag status-manual">manual added</span>',
+    'no_doi_no_pdf':    '<span class="status-tag status-missing">no DOI / no PDF</span>',
+    'no_doi':           '<span class="status-tag status-missing">no DOI</span>',
+    'not_oa':           '<span class="status-tag status-missing">not OA</span>',
+    'no_access':        '<span class="status-tag status-missing">no access</span>',
+    'download_failed':  '<span class="status-tag status-missing">download failed</span>',
+    'needs_manual':     '<span class="status-tag status-missing">needs manual</span>',
+    'not_found':        '<span class="status-tag status-missing">not found</span>',
+  };
+  return map[status] || `<span class="status-tag status-other">${status || 'unknown'}</span>`;
+}
+
+function exportResultsExcel() {
+  window.open(`${API}/api/results/export-excel`);
+}
+
+function exportMissingFulltext() {
+  window.open(`${API}/api/phase2/export-missing`);
+}
+
+// legacy
+function downloadResults() {
+  if (window._resultFile) {
+    window.open(`${API}/api/download/${window._resultFile}`);
+  } else {
+    alert('No results available yet');
+  }
+}
+
+// ── PDF Upload Modal ─────────────────────────────
+
+let _uploadDoi = '';
+let _uploadFile = null;
+
+function openUploadModal(doi, title) {
+  _uploadDoi = doi;
+  _uploadFile = null;
+  if (doi.startsWith('NO_DOI_') && title) {
+    document.getElementById('modalDoi').textContent = `上传PDF: ${title}`;
+  } else {
+    document.getElementById('modalDoi').textContent = `DOI: ${doi}`;
+  }
+  document.getElementById('uploadModal').classList.add('active');
+  document.getElementById('uploadFileName').textContent = '';
+  document.getElementById('uploadStatusMsg').textContent = '';
+  document.getElementById('localStatusMsg').textContent = '';
+  document.getElementById('pdfFileInput').value = '';
+  document.getElementById('localPathInput').value = '';
+  document.getElementById('btnUploadPdf').disabled = true;
+  switchUploadTab('file');
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.remove('active');
+  _uploadDoi = '';
+  _uploadFile = null;
+}
+
+function switchUploadTab(tab) {
+  document.querySelectorAll('#uploadModal .tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#uploadModal .tab-content').forEach(c => c.classList.remove('active'));
+  if (tab === 'file') {
+    document.querySelector('#uploadModal .tab-btn:nth-child(1)').classList.add('active');
+    document.getElementById('tabUpload').classList.add('active');
+  } else {
+    document.querySelector('#uploadModal .tab-btn:nth-child(2)').classList.add('active');
+    document.getElementById('tabLocal').classList.add('active');
+  }
+}
+
+function onPdfFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    document.getElementById('uploadStatusMsg').textContent = 'Only PDF files are accepted.';
+    document.getElementById('uploadStatusMsg').style.color = 'var(--coral)';
+    return;
+  }
+  _uploadFile = file;
+  document.getElementById('uploadFileName').textContent = `Selected: ${file.name} (${formatSize(file.size)})`;
+  document.getElementById('btnUploadPdf').disabled = false;
+}
+
+async function submitUploadPdf() {
+  if (!_uploadFile || !_uploadDoi) return;
+  const btn = document.getElementById('btnUploadPdf');
+  const status = document.getElementById('uploadStatusMsg');
+  btn.disabled = true;
+  status.textContent = 'Uploading...';
+  status.style.color = 'var(--text-secondary)';
+
+  const formData = new FormData();
+  formData.append('file', _uploadFile);
+  formData.append('doi', _uploadDoi);
+
+  try {
+    const resp = await fetch(`${API}/api/results/upload-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await resp.json();
+    if (data.error) {
+      status.textContent = data.error;
+      status.style.color = 'var(--coral)';
+    } else {
+      status.textContent = `Uploaded! ${formatSize(data.size)}`;
+      status.style.color = 'var(--green)';
+      log(`PDF manually added: ${data.doi}`, 'log-success');
+      setTimeout(() => { closeUploadModal(); loadResults(); }, 1000);
+    }
+  } catch (e) {
+    status.textContent = `Upload failed: ${e.message}`;
+    status.style.color = 'var(--coral)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function submitLocalPdf() {
+  const path = document.getElementById('localPathInput').value.trim();
+  const status = document.getElementById('localStatusMsg');
+  if (!path || !_uploadDoi) { status.textContent = 'Path is required.'; status.style.color = 'var(--coral)'; return; }
+
+  status.textContent = 'Importing...';
+  status.style.color = 'var(--text-secondary)';
+
+  try {
+    const resp = await fetch(`${API}/api/results/import-local-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doi: _uploadDoi, path: path }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      status.textContent = data.error;
+      status.style.color = 'var(--coral)';
+    } else {
+      status.textContent = 'Imported successfully!';
+      status.style.color = 'var(--green)';
+      log(`PDF imported: ${data.doi} from ${data.source}`, 'log-success');
+      setTimeout(() => { closeUploadModal(); loadResults(); }, 1000);
+    }
+  } catch (e) {
+    status.textContent = `Import failed: ${e.message}`;
+    status.style.color = 'var(--coral)';
+  }
+}
+
+// Drag & drop on the drop zone
+(function initDropZone() {
+  // deferred — setup after DOM is ready implicitly
+})();
+
+setTimeout(() => {
+  const dz = document.getElementById('dropZone');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      document.getElementById('pdfFileInput').files = files;
+      onPdfFileSelected({ target: { files: files } });
+    }
+  });
+}, 500);
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+  return bytes.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+// ── Output Directory ──────────────────────────────
+
+async function loadConfig() {
+  try {
+    const resp = await fetch(`${API}/api/config`);
+    const cfg = await resp.json();
+    if (cfg.output_dir) {
+      document.getElementById('outputPath').value = cfg.output_dir;
+      document.getElementById('outputStatus').textContent =
+        `Current: ${cfg.output_dir} (PDFs → papers/, CSV → here)`;
+    }
+    if (cfg.mineru_output_dir) {
+      document.getElementById('mineruOutputPath').value = cfg.mineru_output_dir;
+      document.getElementById('mineruOutputStatus').textContent =
+        `Current: ${cfg.mineru_output_dir}`;
+    } else {
+      document.getElementById('mineruOutputStatus').textContent =
+        `Default: {output_dir}/ocr_output`;
+    }
+    // Restore screening criteria
+    if (cfg.screening_inclusion) {
+      document.getElementById('includeCriteria').value = cfg.screening_inclusion;
+    }
+    if (cfg.screening_exclusion) {
+      document.getElementById('excludeCriteria').value = cfg.screening_exclusion;
+    }
+    if (cfg.deepseek_api_key) {
+      document.getElementById('deepseekApiKey').value = cfg.deepseek_api_key;
+    }
+    if (cfg.deepseek_model) {
+      document.getElementById('deepseekModel').value = cfg.deepseek_model;
+    }
+    if (cfg.deepseek_api_base) {
+      document.getElementById('deepseekApiBase').value = cfg.deepseek_api_base;
+    }
+    if (cfg.screening_max_chars) {
+      document.getElementById('maxContentChars').value = cfg.screening_max_chars;
+    }
+    if (cfg.screening_temperature != null && cfg.screening_temperature !== '') {
+      document.getElementById('screeningTemperature').value = cfg.screening_temperature;
+    }
+    // Check if Phase 3 is done (any results_final_*.csv exists) → enable P4
+    const stateResp = await fetch(`${API}/api/state`);
+    const state = await stateResp.json();
+    if (state.summary) {
+      document.getElementById('btnPhase4').disabled = false;
+    }
+  } catch (e) {
+    // Config load non-critical, page still works with defaults
+  }
+}
+
+async function saveOutputDir() {
+  const path = document.getElementById('outputPath').value.trim();
+  if (!path) {
+    document.getElementById('outputStatus').textContent = '⚠ Path cannot be empty';
+    return;
+  }
+  try {
+    const resp = await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({output_dir: path})
+    });
+    const data = await resp.json();
+    if (data.error) {
+      document.getElementById('outputStatus').textContent = '⚠ ' + data.error;
+    } else {
+      document.getElementById('outputPath').value = data.output_dir;
+      document.getElementById('outputStatus').textContent =
+        `✓ Saved: ${data.output_dir}`;
+      log(`Output directory set to: ${data.output_dir}`, 'log-success');
+    }
+  } catch (e) {
+    document.getElementById('outputStatus').textContent = '⚠ Save failed: ' + e.message;
+  }
+}
+
+async function saveMineruOutputDir() {
+  const path = document.getElementById('mineruOutputPath').value.trim();
+  try {
+    const resp = await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mineru_output_dir: path})
+    });
+    const data = await resp.json();
+    if (data.error) {
+      document.getElementById('mineruOutputStatus').textContent = '⚠ ' + data.error;
+    } else {
+      if (data.mineru_output_dir) {
+        document.getElementById('mineruOutputPath').value = data.mineru_output_dir;
+        document.getElementById('mineruOutputStatus').textContent =
+          `✓ Saved: ${data.mineru_output_dir}`;
+        log(`MinerU MD output set to: ${data.mineru_output_dir}`, 'log-success');
+      } else {
+        document.getElementById('mineruOutputPath').value = '';
+        document.getElementById('mineruOutputStatus').textContent =
+          `✓ Reset to default: {output_dir}/ocr_output`;
+        log('MinerU MD output reset to default', 'log-info');
+      }
+    }
+  } catch (e) {
+    document.getElementById('mineruOutputStatus').textContent = '⚠ Save failed: ' + e.message;
+  }
+}
+
+// ── Phase 3: MinerU OCR ────────────────────────────
+
+function setPhase3Status(text, cls) {
+  const badge = document.getElementById('phase3Badge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+function updatePhase3Progress(pct) {
+  document.getElementById('phase3ProgressFill').style.width = pct + '%';
+  document.getElementById('phase3Text').textContent = `OCR Progress: ${Math.round(pct)}%`;
+}
+
+async function startPhase3() {
+  document.getElementById('btnPhase3').disabled = true;
+  setPhase3Status('Starting...', 'running');
+  log('Starting Phase 3 (MinerU OCR)...', 'log-info');
+  document.getElementById('phase3Progress').classList.remove('hidden');
+
+  try {
+    const resp = await fetch(`${API}/api/phase3/start`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      log(data.error, 'log-error');
+      setPhase3Status('Error', 'error');
+      document.getElementById('btnPhase3').disabled = false;
+    } else {
+      log(`Phase 3 started: ${data.pdfs_to_process} PDFs to process`, 'log-success');
+      setPhase3Status('Running', 'running');
+    }
+  } catch (e) {
+    log(`Phase 3 start failed: ${e.message}`, 'log-error');
+    setPhase3Status('Error', 'error');
+    document.getElementById('btnPhase3').disabled = false;
+  }
+}
+
+async function downloadExcel() {
+  try {
+    const resp = await fetch(`${API}/api/phase3/status`);
+    const status = await resp.json();
+    if (status.latest_excel_name) {
+      window.open(`${API}/api/phase3/download`);
+    } else {
+      alert('No Excel file available. Run Phase 3 first.');
+    }
+  } catch (e) {
+    alert('Failed to check Excel status: ' + e.message);
+  }
+}
+
+// ── Phase 4: LLM Screening ──────────────────────────
+
+function setPhase4Status(text, cls) {
+  const badge = document.getElementById('phase4Badge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+function updatePhase4Progress(pct) {
+  document.getElementById('phase4ProgressFill').style.width = pct + '%';
+  document.getElementById('phase4Text').textContent = `Screening Progress: ${Math.round(pct)}%`;
+}
+
+async function savePhase4Settings() {
+  const apiKey = document.getElementById('deepseekApiKey').value.trim();
+  const model = document.getElementById('deepseekModel').value.trim();
+  const apiBase = document.getElementById('deepseekApiBase').value.trim();
+  const maxChars = document.getElementById('maxContentChars').value.trim();
+  const temp = document.getElementById('screeningTemperature').value.trim();
+  const inclusion = document.getElementById('includeCriteria').value.trim();
+  const exclusion = document.getElementById('excludeCriteria').value.trim();
+  const statusEl = document.getElementById('phase4SaveStatus');
+
+  try {
+    const body = {
+      deepseek_api_key: apiKey,
+      deepseek_model: model,
+      deepseek_api_base: apiBase,
+      screening_inclusion: inclusion,
+      screening_exclusion: exclusion
+    };
+    if (maxChars) body.deepseek_max_content_chars = parseInt(maxChars);
+    if (temp) body.deepseek_temperature = parseFloat(temp);
+
+    const resp = await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.error) {
+      statusEl.textContent = 'Save failed';
+      statusEl.style.color = 'var(--danger)';
+    } else {
+      statusEl.textContent = 'Saved';
+      statusEl.style.color = 'var(--success)';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    }
+  } catch (e) {
+    statusEl.textContent = 'Save failed';
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+async function startPhase4() {
+  const inclusion = document.getElementById('includeCriteria').value.trim();
+  const exclusion = document.getElementById('excludeCriteria').value.trim();
+  const apiKey = document.getElementById('deepseekApiKey').value.trim();
+  const model = document.getElementById('deepseekModel').value.trim();
+  const apiBase = document.getElementById('deepseekApiBase').value.trim();
+  const maxChars = document.getElementById('maxContentChars').value.trim();
+  const temperature = document.getElementById('screeningTemperature').value.trim();
+
+  if (!inclusion && !exclusion) {
+    // Criteria are optional — backend uses built-in 4-step decision tree by default.
+    // Just log a note so the user knows defaults are active.
+    log('No custom criteria provided. Using built-in 4-step decision tree defaults.', 'log-info');
+  }
+
+  document.getElementById('btnPhase4').disabled = true;
+  setPhase4Status('Starting...', 'running');
+  log('Starting Phase 4 (LLM Screening)...', 'log-info');
+  document.getElementById('phase4Progress').classList.remove('hidden');
+
+  try {
+    const body = {
+      inclusion_criteria: inclusion,
+      exclusion_criteria: exclusion,
+      api_key: apiKey
+    };
+    if (model) body.model = model;
+    if (apiBase) body.api_base = apiBase;
+    if (maxChars) body.max_content_chars = parseInt(maxChars);
+    if (temperature) body.temperature = parseFloat(temperature);
+
+    const resp = await fetch(`${API}/api/phase4/start`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.error) {
+      log(data.error, 'log-error');
+      setPhase4Status('Error', 'error');
+      document.getElementById('btnPhase4').disabled = false;
+    } else {
+      log(`Phase 4 started: ${data.ocr_ready_papers} papers ready for screening, model: ${data.model}`, 'log-success');
+      setPhase4Status('Running', 'running');
+    }
+  } catch (e) {
+    log(`Phase 4 start failed: ${e.message}`, 'log-error');
+    setPhase4Status('Error', 'error');
+    document.getElementById('btnPhase4').disabled = false;
+  }
+}
+
+async function downloadScreenedExcel() {
+  try {
+    const resp = await fetch(`${API}/api/phase4/status`);
+    const status = await resp.json();
+    if (status.latest_excel_name) {
+      window.open(`${API}/api/phase4/download`);
+    } else {
+      alert('No screened Excel file available. Run Phase 4 first.');
+    }
+  } catch (e) {
+    alert('Failed to check Excel status: ' + e.message);
+  }
+}
+
+// Init
+loadConfig();
+connectWebSocket();
+loadPhase2ProviderState();
+document.getElementById('btnStart').disabled = true;
+</script>
+</body>
+</html>
