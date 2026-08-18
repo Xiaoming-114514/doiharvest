@@ -1188,6 +1188,10 @@ async def start_phase4(data: dict):
     max_chars = int(web_max_chars) if web_max_chars is not None else (ws_cfg.get("deepseek_max_content_chars") or ws_cfg.get("screening_max_chars") or (getattr(_cfg, "SCREENING_MAX_CHARS", 90000) if _cfg else 90000))
     temperature = float(web_temperature) if web_temperature is not None and web_temperature != "" else (ws_cfg.get("deepseek_temperature") or ws_cfg.get("screening_temperature") or (getattr(_cfg, "SCREENING_TEMPERATURE", 0.1) if _cfg else 0.1))
     api_delay = getattr(_cfg, "SCREENING_API_DELAY", 2.0) if _cfg else 2.0
+    # 按筛选结果归档 PDF（workspace_config.json 的 phase4_organize_pdfs 可关闭）
+    organize_pdfs = ws_cfg.get("phase4_organize_pdfs", True)
+    if isinstance(organize_pdfs, str):
+        organize_pdfs = organize_pdfs.strip().lower() in ("1", "true", "yes", "on")
 
     output_dir = str(_get_output_dir())
     mineru_output_dir = str(_get_mineru_output_dir())
@@ -1203,6 +1207,7 @@ async def start_phase4(data: dict):
         ws_cfg["deepseek_api_base"] = web_api_base
     ws_cfg["screening_max_chars"] = max_chars
     ws_cfg["screening_temperature"] = temperature
+    ws_cfg["phase4_organize_pdfs"] = organize_pdfs
     _save_workspace_config(ws_cfg)
 
     phase4_running = True
@@ -1226,6 +1231,7 @@ async def start_phase4(data: dict):
                 max_content_chars=max_chars,
                 temperature=temperature,
                 api_delay=api_delay,
+                organize_pdfs=organize_pdfs,
                 progress_callback=progress_callback,
             )
             logger.info(f"Phase 4 finished: {result}")

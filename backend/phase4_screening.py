@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -454,6 +455,61 @@ def _parse_llm_response(raw_text: str) -> tuple[str, str]:
     return "Error", f"Failed to parse LLM response. Raw: {raw_text[:3000]}"
 
 
+# ── PDF organization by screening decision ──────────────────
+# 按筛选结果把 PDF 移动到对应分类子文件夹，方便后续人工整理。
+CATEGORY_DIRS = {
+    "Include": "include",
+    "Exclude": "exclude",
+    "Uncertain": "uncertain",
+    "Skip": "skip",
+    "Error": "error",
+}
+
+
+def organize_pdfs_by_decision(ws, papers_dir, decision_col, filename_col,
+                              filepath_col=None) -> dict:
+    """把 papers 目录下的 PDF 按 screening_decision 移动到对应子文件夹。
+
+    子文件夹: papers/include, papers/exclude, papers/uncertain, papers/skip, papers/error
+
+    Args:
+        ws: openpyxl worksheet（最终 Excel 的活动表）
+        papers_dir: PDF 所在目录
+        decision_col / filename_col / filepath_col: 列号（1-based）
+
+    Returns:
+        dict: {decision: 移动成功的篇数}
+    """
+    moved: dict[str, int] = {}
+    for row_idx in range(2, ws.max_row + 1):
+        dec = str(ws.cell(row=row_idx, column=decision_col).value or "").strip()
+        if dec not in CATEGORY_DIRS:
+            continue
+        filename = str(ws.cell(row=row_idx, column=filename_col).value or "").strip()
+        if not filename:
+            continue
+        # 定位源文件：优先 papers_dir/filename，其次 filepath 列
+        src = papers_dir / filename
+        if not src.exists() and filepath_col:
+            fp = str(ws.cell(row=row_idx, column=filepath_col).value or "").strip()
+            if fp and Path(fp).exists():
+                src = Path(fp)
+        if not src.exists():
+            continue
+        # 目标子文件夹
+        cat_dir = papers_dir / CATEGORY_DIRS[dec]
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        dst = cat_dir / filename
+        if dst.exists():
+            continue  # 已归档过，跳过
+        try:
+            shutil.move(str(src), str(dst))
+            moved[dec] = moved.get(dec, 0) + 1
+        except OSError as e:
+            logger.warning(f"organize: move failed {filename}: {e}")
+    return moved
+
+
 def run_phase4(
     inclusion_criteria: str,
     exclusion_criteria: str,
@@ -466,6 +522,7 @@ def run_phase4(
     max_content_chars: int = 90000,
     temperature: float = 0.1,
     api_delay: float = 2.0,
+    organize_pdfs: bool = True,
     progress_callback: StatusCallback = None,
 ) -> dict:
     """
@@ -971,6 +1028,22 @@ def run_phase4(
     except OSError:
         pass
 
+    # ── 按筛选结果归档 PDF（默认开启；可在调用处关闭）──
+    moved_pdfs: dict[str, int] = {}
+    if organize_pdfs:
+        papers_dir = out_root / "papers"
+        if papers_dir.is_dir():
+            try:
+                moved_pdfs = organize_pdfs_by_decision(
+                    ws, papers_dir, decision_col, filename_col, filepath_col
+                )
+                if moved_pdfs:
+                    logger.info(f"Phase 4: PDF 归档完成 {moved_pdfs}")
+                else:
+                    logger.info("Phase 4: 无可归档 PDF（文件可能已归档或缺失）")
+            except Exception as e:
+                logger.warning(f"Phase 4: PDF 归档失败: {e}")
+
     stats = {
         "total_papers": total,
         "included": include_count,
@@ -978,6 +1051,7 @@ def run_phase4(
         "uncertain": uncertain_count,
         "skipped": skip_count,
         "errors": error_count,
+        "pdfs_organized": moved_pdfs,
         "excel_path": str(final_path),
         "excel_name": final_path.name,
     }
