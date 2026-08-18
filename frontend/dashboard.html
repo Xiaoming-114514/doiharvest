@@ -449,6 +449,8 @@
     <div class="phase-dot" id="phase3Dot">P3</div>
     <div style="width:40px;height:2px;background:var(--border);align-self:center"></div>
     <div class="phase-dot" id="phase4Dot">P4</div>
+    <div style="width:40px;height:2px;background:var(--border);align-self:center"></div>
+    <div class="phase-dot" id="phase5Dot">P5</div>
   </div>
 
   <!-- Stats -->
@@ -841,6 +843,71 @@ STEP 4 — 研究设计：临床研究（排除动物/细胞、纯机制、纯 M
     <p id="phase4Text" style="font-size:12px;color:var(--text-secondary)"></p>
     <div class="row hidden" id="phase4Results" style="margin-top:12px">
       <button class="btn-outline" onclick="downloadScreenedExcel()">Download Final Excel</button>
+    </div>
+  </div>
+
+  <!-- Phase 5: Information Extraction -->
+  <div class="card hidden" id="phase5Card">
+    <h2>5. Information Extraction (信息提取)</h2>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Automatically OCR a folder of PDFs and extract structured information
+      (study design, sample size, outcomes, tools, etc.) via LLM, then export
+      to Excel. Ideal for building extraction tables from screened papers.
+      (基于双通道反幻觉校验，字段级两遍比对，不一致自动置 N/A)
+    </p>
+
+    <div style="margin-bottom:10px">
+      <label for="phase5PdfFolder" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">
+        PDF 文件夹路径
+      </label>
+      <input type="text" id="phase5PdfFolder" placeholder="例如：E:\papers\include（Phase 4 归档的 include 文件夹，或任意 PDF 目录）"
+        style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:10px">
+      <label for="phase5Prompt" style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">
+        提取提示词（描述要提取哪些信息）
+      </label>
+      <textarea id="phase5Prompt" rows="4" placeholder="例如：请提取以下信息：1. 研究设计类型；2. 样本量（含分组）；3. 主要结局指标及测量工具；4. 随访时长；5. 主要结论（2-3句话概括）"
+        style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);box-sizing:border-box;resize:vertical"></textarea>
+    </div>
+
+    <details style="margin-bottom:10px;font-size:12px;color:var(--text-secondary)">
+      <summary style="cursor:pointer;margin-bottom:6px;user-select:none">Advanced Settings</summary>
+      <div style="padding:8px 0 0 12px;border-left:2px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:520px">
+        <div>
+          <label for="phase5Model" style="display:block;margin-bottom:3px">Model</label>
+          <input type="text" id="phase5Model" placeholder="deepseek-v4-pro"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label for="phase5MaxChars" style="display:block;margin-bottom:3px">Content Limit (chars)</label>
+          <input type="number" id="phase5MaxChars" placeholder="90000" min="1000" step="1000"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label for="phase5Temperature" style="display:block;margin-bottom:3px">Temperature (0-2)</label>
+          <input type="number" id="phase5Temperature" placeholder="0.1" min="0" max="2" step="0.05"
+            style="padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);width:100%;box-sizing:border-box">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding-top:4px">
+          <input type="checkbox" id="phase5DualPass" checked>
+          <label for="phase5DualPass" style="cursor:pointer">Dual-Pass 双通道校验</label>
+        </div>
+      </div>
+    </details>
+
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn-coral" id="btnPhase5" onclick="startPhase5()">Start Extraction</button>
+      <button class="btn-outline" id="btnPhase5Stop" onclick="stopPhase5()" disabled>Stop</button>
+      <span class="status-badge status-idle" id="phase5Badge">Idle</span>
+    </div>
+    <div class="progress-bar hidden" id="phase5Progress">
+      <div class="progress-fill" id="phase5ProgressFill" style="width:0%;background:var(--coral)"></div>
+    </div>
+    <p id="phase5Text" style="font-size:12px;color:var(--text-secondary)"></p>
+    <div class="row hidden" id="phase5Results" style="margin-top:12px">
+      <button class="btn-outline" onclick="downloadPhase5Excel()">Download Extraction Excel</button>
     </div>
   </div>
 
@@ -1912,6 +1979,89 @@ function handleMessage(msg) {
       document.getElementById('btnPhase4').disabled = false;
       break;
 
+    // ── Phase 5: Information Extraction ──
+    case 'phase5_starting':
+      log(`Phase 5 starting: folder=${data.pdf_folder}, OCR → ${data.ocr_output}`, 'log-info');
+      document.getElementById('phase5Dot').classList.add('active');
+      setPhase5Status('Starting...', 'running');
+      document.getElementById('phase5Progress').classList.remove('hidden');
+      updatePhase5Progress(2);
+      break;
+
+    case 'phase5_ocr_running':
+      log(`Phase 5: MinerU OCR 开始（${data.total_pdfs} 篇）...`, 'log-info');
+      setPhase5Status('OCR...', 'running');
+      break;
+
+    case 'phase5_ocr_done':
+      log('Phase 5: MinerU OCR 完成', 'log-success');
+      break;
+
+    case 'phase5_ocr_summary':
+      log(`Phase 5: OCR ${data.ocr_success} 成功 / ${data.ocr_failed} 失败`, 'log-info');
+      break;
+
+    case 'phase5_llm_starting':
+      log(`Phase 5: LLM 提取开始（${data.to_process} 篇待处理, dual_pass=${data.dual_pass}）`, 'log-info');
+      setPhase5Status('Extracting...', 'running');
+      break;
+
+    case 'phase5_progress':
+      updatePhase5Progress(data.pct);
+      document.getElementById('phase5Text').textContent =
+        `Extraction: ${data.current}/${data.total} | OK: ${data.extract_success} | Err: ${data.extract_error} | Skip: ${data.extract_skip}`;
+      if (data.status === 'Success') {
+        log(`  [${data.current}/${data.total}] ✓ ${data.current_file}` + (data.dual_pass_status ? ` (${data.dual_pass_status})` : ''), 'log-success');
+      } else if (data.status === 'Error') {
+        log(`  [${data.current}/${data.total}] ✗ ${data.current_file}`, 'log-error');
+      } else if (data.status === 'Skipped') {
+        log(`  [${data.current}/${data.total}] — ${data.current_file} (跳过)`, 'log-warn');
+      }
+      break;
+
+    case 'phase5_retry':
+      log(`Phase 5: retry round ${data.round}/${data.max_rounds} — ${data.count} failed paper(s)`, 'log-warn');
+      break;
+
+    case 'phase5_retry_progress':
+      log(`  [重试 ${data.round}/${data.max_rounds}] [${data.current}/${data.total}] ${data.status === 'Success' ? '✓' : '✗'} | ${data.file}`, data.status === 'Success' ? 'log-success' : 'log-warn');
+      break;
+
+    case 'phase5_completed':
+      log(`Phase 5 complete! 提取成功: ${data.extract_success}, 失败: ${data.extract_error}, 跳过: ${data.extract_skip || 0}`, 'log-success');
+      updatePhase5Progress(100);
+      setPhase5Status('Done', 'done');
+      document.getElementById('phase5Dot').classList.remove('active');
+      document.getElementById('phase5Dot').classList.add('done');
+      document.getElementById('btnPhase5').disabled = false;
+      document.getElementById('btnPhase5Stop').disabled = true;
+      document.getElementById('phase5Results').classList.remove('hidden');
+      break;
+
+    case 'phase5_error':
+      log(`Phase 5 error: ${data.error}`, 'log-error');
+      setPhase5Status('Error', 'error');
+      document.getElementById('phase5Dot').classList.remove('active');
+      document.getElementById('btnPhase5').disabled = false;
+      document.getElementById('btnPhase5Stop').disabled = true;
+      break;
+
+    case 'phase5_stopping':
+      log('Phase 5: 正在停止，保存进度...', 'log-warn');
+      break;
+
+    case 'phase5_stopped':
+      log(`Phase 5 stopped: ${data.message || '进度已保存'}`, 'log-warn');
+      setPhase5Status('Stopped', 'done');
+      document.getElementById('phase5Dot').classList.remove('active');
+      document.getElementById('btnPhase5').disabled = false;
+      document.getElementById('btnPhase5Stop').disabled = true;
+      break;
+
+    case 'phase5_warning':
+      log(`Phase 5 warning: ${data.message || data.error || ''}`, 'log-warn');
+      break;
+
     case 'pong':
       break;
   }
@@ -1962,6 +2112,7 @@ function updateFromState(state) {
     document.getElementById('phase3Dot').classList.remove('active');
     document.getElementById('phase4Card').classList.remove('hidden');
     document.getElementById('btnPhase4').disabled = false;
+    document.getElementById('phase5Card').classList.remove('hidden');
   }
   if (state.phase4_complete) {
     document.getElementById('phase4Dot').classList.add('done');
@@ -2555,6 +2706,89 @@ async function downloadScreenedExcel() {
     }
   } catch (e) {
     alert('Failed to check Excel status: ' + e.message);
+  }
+}
+
+// ── Phase 5: Information Extraction ──────────────────────────
+function setPhase5Status(text, cls) {
+  const badge = document.getElementById('phase5Badge');
+  badge.textContent = text;
+  badge.className = `status-badge status-${cls}`;
+}
+
+function updatePhase5Progress(pct) {
+  const fill = document.getElementById('phase5ProgressFill');
+  fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+async function startPhase5() {
+  const pdfFolder = document.getElementById('phase5PdfFolder').value.trim();
+  const prompt = document.getElementById('phase5Prompt').value.trim();
+  const model = document.getElementById('phase5Model').value.trim();
+  const maxChars = document.getElementById('phase5MaxChars').value.trim();
+  const temperature = document.getElementById('phase5Temperature').value.trim();
+  const dualPass = document.getElementById('phase5DualPass').checked;
+
+  if (!pdfFolder || !prompt) {
+    alert('请填写 PDF 文件夹路径和提取提示词');
+    return;
+  }
+
+  document.getElementById('btnPhase5').disabled = true;
+  document.getElementById('btnPhase5Stop').disabled = false;
+  setPhase5Status('Starting...', 'running');
+  log(`Starting Phase 5 (Information Extraction): folder=${pdfFolder}`, 'log-info');
+  document.getElementById('phase5Progress').classList.remove('hidden');
+  updatePhase5Progress(2);
+
+  try {
+    const body = { pdf_folder: pdfFolder, extraction_prompt: prompt, dual_pass: dualPass };
+    if (model) body.model = model;
+    if (maxChars) body.max_content_chars = parseInt(maxChars);
+    if (temperature) body.temperature = parseFloat(temperature);
+    const resp = await fetch(`${API}/api/phase5/start`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.error) {
+      log(data.error, 'log-error');
+      setPhase5Status('Error', 'error');
+      document.getElementById('btnPhase5').disabled = false;
+      document.getElementById('btnPhase5Stop').disabled = true;
+    } else {
+      log('Phase 5 started: OCR + LLM extraction in progress', 'log-success');
+      setPhase5Status('Running', 'running');
+    }
+  } catch (e) {
+    log(`Phase 5 start failed: ${e.message}`, 'log-error');
+    document.getElementById('btnPhase5').disabled = false;
+    document.getElementById('btnPhase5Stop').disabled = true;
+  }
+}
+
+async function stopPhase5() {
+  try {
+    const resp = await fetch(`${API}/api/phase5/stop`, { method: 'POST' });
+    const data = await resp.json();
+    log(data.message || 'Stop requested', 'log-warn');
+  } catch (e) {
+    log(`Phase 5 stop failed: ${e.message}`, 'log-error');
+  }
+}
+
+async function downloadPhase5Excel() {
+  try {
+    const resp = await fetch(`${API}/api/phase5/status`);
+    const status = await resp.json();
+    if (status.latest_excel_name) {
+      window.open(`${API}/api/phase5/download`);
+    } else {
+      alert('没有找到提取结果 Excel，请先运行 Phase 5。');
+    }
+  } catch (e) {
+    alert('下载失败: ' + e.message);
   }
 }
 

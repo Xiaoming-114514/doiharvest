@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from .pipeline import run_phase1_pipeline, run_phase2_pipeline, _load_state, _save_state
 from .phase3_mineru import run_phase3
 from .phase4_screening import run_phase4
+from .phase5_extract import run_phase5
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -74,6 +75,9 @@ pipeline_running = False
 phase2_running = False
 phase3_running = False
 phase4_running = False
+phase5_running = False
+phase5_stop_event: threading.Event | None = None
+phase5_latest: dict | None = None
 
 # Captured main event loop for cross-thread WebSocket broadcasting
 _main_loop: asyncio.AbstractEventLoop | None = None
@@ -1333,6 +1337,171 @@ async def download_screened_excel():
         return {"error": "No screened Excel file found. Run Phase 4 first."}
     filepath = excel_candidates[0]
     return FileResponse(str(filepath), filename=filepath.name)
+
+
+# ── Phase 5: Structured Information Extraction ─────────────────
+
+def _find_latest_phase5_excel() -> Path | None:
+    """Find the latest Phase 5 extraction_results_*.xlsx in output dir."""
+    out_dir = _get_output_dir()
+    if not out_dir.exists():
+        return None
+    candidates = sorted(
+        out_dir.glob("extraction_results_*.xlsx"),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _resolve_mineru_exe() -> str:
+    """Resolve MinerU executable: workspace_config > config.py > auto-detect."""
+    ws_cfg = _load_workspace_config()
+    candidate = ws_cfg.get("mineru_executable", "") or getattr(_cfg, "MINERU_EXECUTABLE", "")
+    if candidate and Path(candidate).exists():
+        return candidate
+    # Auto-detect common install locations
+    for pattern in (
+        str(Path.home() / "mineru" / "venv" / "Scripts" / "mineru.exe"),
+        str(Path.home() / "MinerU" / "venv" / "Scripts" / "mineru.exe"),
+        str(Path.home() / "mineru_env" / "Scripts" / "mineru.exe"),
+        str(Path.home() / ".mineru" / "venv" / "Scripts" / "mineru.exe"),
+    ):
+        if Path(pattern).exists():
+            return pattern
+    return shutil.which("mineru") or ""
+
+
+@app.post("/api/phase5/start")
+async def start_phase5(data: dict):
+    """Start Phase 5: extract structured info from PDFs using LLM.
+
+    Body:
+      - pdf_folder: str           PDF 文件夹路径（必填）
+      - extraction_prompt: str    提取提示词（必填）
+      - api_key / api_base / model / mineru_exe: 可选（回退到 workspace_config）
+      - max_content_chars / temperature / dual_pass: 可选
+    """
+    global phase5_running, phase5_stop_event, phase5_latest
+
+    if phase5_running:
+        return {"error": "Phase 5（信息提取）正在运行中，请等待完成或先停止。"}
+
+    pdf_folder = data.get("pdf_folder", "").strip()
+    extraction_prompt = data.get("extraction_prompt", "").strip()
+    web_api_key = data.get("api_key", "").strip()
+    web_model = data.get("model", "").strip()
+    web_api_base = data.get("api_base", "").strip()
+    web_mineru = data.get("mineru_exe", "").strip()
+    web_max_chars = data.get("max_content_chars")
+    web_temperature = data.get("temperature")
+    web_dual_pass = data.get("dual_pass")
+
+    if not pdf_folder:
+        return {"error": "请提供 PDF 文件夹路径。"}
+    if not extraction_prompt:
+        return {"error": "请提供提取提示词。"}
+
+    # ── Resolve parameters: Web > workspace_config > config.py > defaults ──
+    ws_cfg = _load_workspace_config()
+    api_key = web_api_key or ws_cfg.get("deepseek_api_key", "") or (getattr(_cfg, "DEEPSEEK_API_KEY", "") if _cfg else "")
+    if not api_key:
+        return {"error": "DeepSeek API Key 未配置。请在 Phase 4/5 卡片或 Web 界面设置。"}
+
+    api_base = web_api_base or ws_cfg.get("deepseek_api_base", "") or (getattr(_cfg, "DEEPSEEK_BASE_URL", "https://api.deepseek.com") if _cfg else "https://api.deepseek.com")
+    model = web_model or ws_cfg.get("deepseek_model", "") or (getattr(_cfg, "DEEPSEEK_MODEL", "deepseek-v4-pro") if _cfg else "deepseek-v4-pro")
+    mineru_exe = web_mineru or ws_cfg.get("mineru_executable", "") or _resolve_mineru_exe()
+    max_chars = int(web_max_chars) if web_max_chars else int(ws_cfg.get("screening_max_chars") or (getattr(_cfg, "SCREENING_MAX_CHARS", 90000) if _cfg else 90000))
+    temperature = float(web_temperature) if web_temperature not in (None, "") else float(ws_cfg.get("screening_temperature") or (getattr(_cfg, "SCREENING_TEMPERATURE", 0.1) if _cfg else 0.1))
+    dual_pass = bool(web_dual_pass) if isinstance(web_dual_pass, bool) else bool(ws_cfg.get("phase5_dual_pass", True))
+    api_delay = float(getattr(_cfg, "SCREENING_API_DELAY", 2.0) if _cfg else 2.0)
+
+    output_dir = str(_get_output_dir())
+
+    # ── Persist settings ──
+    ws_cfg["phase5_pdf_folder"] = pdf_folder
+    ws_cfg["phase5_extraction_prompt"] = extraction_prompt
+    ws_cfg["phase5_dual_pass"] = dual_pass
+    if web_mineru:
+        ws_cfg["mineru_executable"] = web_mineru
+    _save_workspace_config(ws_cfg)
+
+    phase5_stop_event = threading.Event()
+    phase5_running = True
+    phase5_latest = None
+
+    logger.info(
+        f"Starting Phase 5 (Extraction) | folder={pdf_folder} | "
+        f"model={model} | mineru={mineru_exe or '(未找到)'} | dual_pass={dual_pass}"
+    )
+
+    def _run_phase5():
+        global phase5_running, phase5_latest
+        try:
+            result = run_phase5(
+                pdf_folder=pdf_folder,
+                extraction_prompt=extraction_prompt,
+                output_dir=output_dir,
+                mineru_exe=mineru_exe,
+                mineru_backend="pipeline",
+                api_key=api_key,
+                api_base=api_base,
+                model=model,
+                max_content_chars=max_chars,
+                temperature=temperature,
+                dual_pass=dual_pass,
+                dual_pass_temperature=0.8,
+                api_delay=api_delay,
+                progress_callback=progress_callback,
+                stop_event=phase5_stop_event,
+            )
+            logger.info(f"Phase 5 finished: {result}")
+            if "error" not in result:
+                phase5_latest = result
+            # Persist completion flag for reconnection
+            state = _load_state()
+            state["phase5_complete"] = True
+            _save_state(state)
+        except Exception as e:
+            logger.error(f"Phase 5 failed: {e}")
+            progress_callback("phase5_error", {"error": str(e)})
+        finally:
+            phase5_running = False
+
+    t = threading.Thread(target=_run_phase5, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
+@app.post("/api/phase5/stop")
+async def stop_phase5():
+    """Request to stop the running Phase 5 task (saves progress)."""
+    global phase5_running
+    if not phase5_running:
+        return {"error": "当前没有运行中的 Phase 5 任务。"}
+    if phase5_stop_event:
+        phase5_stop_event.set()
+    return {"status": "stopping", "message": "正在停止，当前进度将保存到检查点文件。"}
+
+
+@app.get("/api/phase5/status")
+async def phase5_status():
+    """Check if Phase 5 is running and get latest extraction Excel."""
+    latest = _find_latest_phase5_excel()
+    return {
+        "running": phase5_running,
+        "latest_excel": str(latest) if latest else "",
+        "latest_excel_name": latest.name if latest else "",
+    }
+
+
+@app.get("/api/phase5/download")
+async def download_phase5_excel():
+    """Download the latest Phase 5 extraction Excel."""
+    latest = _find_latest_phase5_excel()
+    if not latest:
+        return {"error": "No Phase 5 extraction result found. Run Phase 5 first."}
+    return FileResponse(str(latest), filename=latest.name)
 
 
 @app.get("/api/files")
