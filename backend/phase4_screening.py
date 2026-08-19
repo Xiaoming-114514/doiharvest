@@ -71,7 +71,13 @@ CRITICAL PRINCIPLES:
 2. The paper may be in English or Chinese. Process either language naturally. The signal terms listed in the criteria are bilingual guides, not an exhaustive checklist.
 3. When your confidence is below 80% on any step, output "Uncertain" for that step — do NOT guess. It is better to flag for human review than to make a wrong call.
 4. Cite specific evidence from the paper (quoted terms, section references, study descriptions) in each step's result.
-5. This is a SCOPING REVIEW (not an intervention meta-analysis). The inclusion criteria focus on POPULATION FRAMEWORK, PRESENCE OF ASSESSMENT TOOLS, and ACCEPTABLE STUDY DESIGNS. There is NO requirement for specific interventions, comparators, or clinical outcomes beyond the assessment tools themselves."""
+5. This is a SCOPING REVIEW (not an intervention meta-analysis). The inclusion criteria focus on POPULATION FRAMEWORK, PRESENCE OF ASSESSMENT TOOLS, and ACCEPTABLE STUDY DESIGNS. There is NO requirement for specific interventions, comparators, or clinical outcomes beyond the assessment tools themselves.
+
+TIGHTENED SCREENING POLICY (strict interpretation, applies to every step):
+A. The SSD/somatoform/MUS framework (STEP 2) must be used to DEFINE the study population in the Methods/Participants section. Merely mentioning "somatization"/"MUS" in the introduction, background, or discussion does NOT qualify as placing the population in the framework.
+B. Functional somatic syndromes (IBS, fibromyalgia, CFS, chronic pain, functional dyspepsia, etc.) qualify ONLY when the study explicitly frames the population under the somatization/MUS/SSD framework IN THE METHODS and uses at least one named clinical assessment tool to assess them.
+C. When a judgment is borderline, default to "Uncertain" rather than "Include" — err on the side of excluding or flagging, never on the side of including."""
+
 
 
 SCREENING_USER_PROMPT = """## 纳入/排除标准 — 4 步决策树
@@ -101,7 +107,10 @@ STEP 2 — 人群框架检查 (Population Framework)
 判断研究对象是否属于躯体症状障碍谱系。
 核心问题：研究人群是否以躯体症状为临床焦点，且被置于 SSD / somatoform / MUS / bodily distress 的诊断或概念框架下？
 
-EN semantic signals（任一情境即可，不要求精确匹配术语）:
+★ 关键限定：框架术语必须出现在**研究对象定义中**（Methods / Participants / 纳入标准部分），用于界定研究人群。
+若框架术语仅出现在引言、背景、讨论（如 "somatic symptoms are common..." 之类的铺垫性论述），而 Methods 中未用它定义人群 → 视为【未置于框架下】，STEP 2 Fail。
+
+EN semantic signals（出现于研究对象定义中才有效）:
   "somatic symptom disorder" / SSD / "DSM-5 somatic symptom"
   "bodily distress disorder" / BDD / "bodily distress syndrome" / BDS
   "somatoform disorder" / "somatization disorder" / "Briquet syndrome"
@@ -110,17 +119,22 @@ EN semantic signals（任一情境即可，不要求精确匹配术语）:
   描述为 "persistent physical symptoms without organic explanation"
   描述为 "multiple somatic complaints" / "functional somatic syndromes"
 
-ZH semantic signals（任一情境即可）:
+ZH semantic signals（出现于研究对象定义中才有效）:
   "躯体症状障碍" / "躯体形式障碍" / "躯体化障碍"
   "躯体化" / "医学无法解释的症状"
   "躯体痛苦障碍" / "躯体忧虑障碍" / "Briquet 综合征"
   描述为 "反复就诊、检查阴性" / "无明显器质性基础" / "功能性躯体不适"
 
-条件纳入：IBS / fibromyalgia / CFS / 功能性消化不良 / 慢性盆腔痛 / 慢性疼痛 等功能性躯体综合征，仅当原文明确将其置于 somatization / MUS / SSD / bodily distress 框架下时通过。
+功能性躯体综合征（IBS / fibromyalgia / CFS / 功能性消化不良 / 慢性盆腔痛 / 慢性疼痛等）——严格条件纳入：
+  必须**同时满足**：
+  ① Methods / 纳入标准中明确将该人群置于 somatization / MUS / SSD / bodily distress 框架下（不是仅在引言提及）
+  ② 研究使用至少一个命名的临床评估工具（STEP 3）评估该人群
+  仅满足其一、或两项都不满足 → STEP 2 Fail。
 
 ✗ 排除：
   - 仅研究抑郁/焦虑/精神分裂症中的躯体症状，未置于 SSD/somatoform/MUS 框架
-  - 纯专科疾病研究（IBS/CFS/fibromyalgia等），全文未提及 somatization/MUS/SSD
+  - 纯专科疾病研究（IBS/CFS/fibromyalgia等），Methods 未用 somatization/MUS/SSD 框架定义人群
+  - 框架术语仅在引言/背景/讨论中出现的研究
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STEP 3 — 评估工具检查 (Assessment Tool Check)
@@ -155,6 +169,7 @@ STEP 4 — 研究设计检查 (Study Design Check)
 • STEP 1–4 全部通过 → Include
 • 任一步不通过 → Exclude（注明触发步骤及论文中的证据）
 • 任一步信息不足、置信度 < 80% → Uncertain（说明哪个步骤不确定及原因）
+• 边界情况（如工具是否为躯体症状专用、框架术语是否真正用于定义人群）无法明确判断时 → 优先 Uncertain，不要倾向 Include
 
 {extra_criteria}
 
@@ -252,6 +267,7 @@ DEFAULT_INCLUSION_SUMMARY = """本研究是一项关于躯体症状障碍（SSD�
 
 核心纳入条件（PCC 框架）：
 • Population：SSD / bodily distress disorder / somatoform / somatization / MUS / MUPS 人群
+  （框架术语必须用于定义研究对象；功能性躯体综合征需在 Methods 中明确置于该框架下）
 • Concept：论文中至少使用了一个命名的临床评估工具（量表/问卷/结构化访谈/医疗使用指标）
 • Context：横断面/病例对照/队列/量表验证/诊断准确性/RCT/干预/卫生服务研究等原始研究
 
@@ -259,7 +275,8 @@ DEFAULT_INCLUSION_SUMMARY = """本研究是一项关于躯体症状障碍（SSD�
 
 DEFAULT_EXCLUSION_SUMMARY = """排除：
 • 非原始研究（综述/Meta分析/评论/病例报告/会议摘要）
-• 人群不匹配（仅抑郁/焦虑/精分中的躯体症状，或纯 IBS/CFS/慢性疼痛专科研究，未置于目标框架下）
+• 人群不匹配（仅抑郁/焦虑/精分中的躯体症状，或框架术语仅出现在引言/讨论中，
+  或纯 IBS/CFS/慢性疼痛专科研究未在 Methods 中置于目标框架下）
 • 纯生物学标志物研究（仅 fMRI/EEG/血液/基因），无临床评估工具
 • 评估工具仅作为 Table 1 基线协变量，Methods 未说明测量目的
 • 动物实验 / 细胞实验 / 纯机制研究 / 纯 ML 模型研究"""

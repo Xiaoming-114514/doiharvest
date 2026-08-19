@@ -27,19 +27,41 @@ os.chdir(str(PROJECT_ROOT))
 
 # ── Python runtime detection ─────────────────────────────────
 def find_python() -> str:
-    """Find the best available Python: prefer project venv, then system python."""
+    """Find a usable Python for running subprocesses.
+
+    Priority:
+      1. Project virtual env (.venv created by install.py).
+      2. The interpreter currently running this script (sys.executable) —
+         guaranteed usable, since start.py is already running under it.
+      3. System Python, skipping Microsoft Store App Execution Aliases
+         (WindowsApps\\python*.exe placeholders that are NOT real Pythons).
+    """
     # 1. Project venv (created by install.py)
     venv_py = PROJECT_ROOT / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
     if venv_py.exists():
         return str(venv_py)
 
-    # 2. System python
-    for cmd in ["python3", "python"]:
-        path = shutil.which(cmd)
-        if path:
-            return path
+    # 2. Current interpreter (the one running this script)
+    if sys.executable:
+        return sys.executable
 
-    print("[!] ERROR: No Python found.")
+    # 3. System python — skip Store aliases, verify it actually runs
+    for cmd in ["python", "python3"]:
+        path = shutil.which(cmd)
+        if not path:
+            continue
+        # Microsoft Store App Execution Alias (WindowsApps\python*.exe) is a
+        # placeholder that only opens the Store — not a real Python.
+        if os.name == "nt" and "WindowsApps" in str(path):
+            continue
+        try:
+            r = subprocess.run([path, "-c", "pass"], capture_output=True, timeout=10)
+            if r.returncode == 0:
+                return path
+        except Exception:
+            continue
+
+    print("[!] ERROR: No usable Python found.")
     print("    Run install.bat / install.py first, or install Python 3.10+.")
     input("Press Enter to exit...")
     sys.exit(1)
@@ -74,10 +96,18 @@ def install_deps(python_path: str) -> bool:
         print(f"[*] Installing {len(missing)} missing packages ...")
         for pkg in missing:
             print(f"    {pkg}")
+        # Use Tsinghua mirror first for speed, fall back to official PyPI
         result = subprocess.run(
-            [python_path, "-m", "pip", "install"] + missing,
+            [python_path, "-m", "pip", "install"] + missing +
+            ["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"],
             capture_output=True, text=True
         )
+        if result.returncode != 0:
+            print("[*] Mirror install failed, retrying with official PyPI ...")
+            result = subprocess.run(
+                [python_path, "-m", "pip", "install"] + missing,
+                capture_output=True, text=True
+            )
         if result.returncode != 0:
             print(result.stderr[-500:] if result.stderr else "Unknown pip error")
             print("[!] WARNING: Some packages may not have installed. Trying to continue ...")
